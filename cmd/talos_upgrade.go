@@ -12,7 +12,7 @@ import (
 )
 
 var upgradeLongHelp = strings.TrimSpace(`
-The "upgrade" command updates the single Talos node to TALOS_VERSION from clusterenv.yaml.
+The "upgrade" command updates the single Talos node using the installer image provided by talosctl.
 
 On top of this, after upgrading Talos on all nodes, it also executes kubernetes-upgrades for the whole cluster as well.
 

@@ -1,6 +1,6 @@
 apiVersion: v1alpha1
 kind: LinkConfig
-name: ${TALOS_INTERFACE}
+name: eth0
 up: true
 addresses:
   - address: ${MASTER1IP_CIDR}
@@ -9,5 +9,5 @@ routes:
 ---
 apiVersion: v1alpha1
 kind: Layer2VIPConfig
-link: ${TALOS_INTERFACE}
+link: eth0
 name: ${VIP_IP}

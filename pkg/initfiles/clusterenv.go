@@ -237,12 +237,6 @@ func CheckEnvVariables() {
 		"DOMAIN_0",
 		"DOMAIN_0_EMAIL",
 		"DOMAIN_0_CLOUDFLARE_TOKEN",
-		"TALOS_INTERFACE",
-		"INSTALL_DISK",
-		"TALOS_VERSION",
-		"KUBERNETES_VERSION",
-		"DNS_SERVER_0",
-		"DNS_SERVER_1",
 	}
 	for _, key := range requiredKeys {
 		if helper.TalEnv[key] == "" {

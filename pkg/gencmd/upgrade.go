@@ -11,7 +11,7 @@ func GenUpgrade(node string, extraFlags []string) []string {
 		node = helper.TalEnv["MASTER1IP_IP"]
 	}
 	command := embed.GetTalosExec() + " upgrade --talosconfig " + talosconfig.TalosconfigPath() +
-		" -n " + node + " --image ghcr.io/siderolabs/installer:" + helper.TalEnv["TALOS_VERSION"] + " --preserve"
+		" -n " + node + " --preserve"
 	for _, flag := range extraFlags {
 		command += " " + flag
 	}
