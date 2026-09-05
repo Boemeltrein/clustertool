@@ -4,13 +4,10 @@ go 1.26.5
 
 require (
 	filippo.io/age v1.3.2
-	github.com/budimanjojo/talhelper/v3 v3.1.17
 	github.com/getsops/sops/v3 v3.13.3
 	github.com/go-logr/zerologr v1.2.3
-	github.com/invopop/jsonschema v0.14.0
 	github.com/leaanthony/debme v1.2.1
 	github.com/rs/zerolog v1.35.1
-	github.com/siderolabs/talos/pkg/machinery v1.14.0-alpha.2
 	github.com/spf13/cobra v1.10.2
 	github.com/trueforge-org/forgetool/v4 v4.1.1
 	golang.org/x/crypto v0.56.0

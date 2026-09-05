@@ -6,7 +6,6 @@ import (
 	"github.com/trueforge-org/clustertool/pkg/gencmd"
 	"github.com/trueforge-org/clustertool/pkg/initfiles"
 	"github.com/trueforge-org/clustertool/pkg/sops"
-	"github.com/trueforge-org/clustertool/pkg/talassist"
 )
 
 var kubeconfig = &cobra.Command{
@@ -32,7 +31,6 @@ var kubeconfig = &cobra.Command{
 			log.Info().Msgf("Error decrypting files: %v\n", err)
 		}
 		initfiles.LoadTalEnv(false)
-		talassist.LoadTalConfig()
 		log.Info().Msg("Running Cluster kubeconfig")
 
 		taloscmds := gencmd.GenPlain("kubeconfig", node, extraArgs)

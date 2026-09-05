@@ -1,0 +1,6 @@
+apiVersion: v1alpha1
+kind: KubeNetworkConfig
+podSubnets:
+  - ${PODNET}
+serviceSubnets:
+  - ${SVCNET}

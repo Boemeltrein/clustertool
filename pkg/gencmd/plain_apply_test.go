@@ -1,122 +1,44 @@
 package gencmd
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
-	talhelperCfg "github.com/budimanjojo/talhelper/v3/pkg/config"
 	"github.com/trueforge-org/clustertool/pkg/helper"
-	"github.com/trueforge-org/clustertool/pkg/talassist"
+	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 )
 
-func withTalConfigFixture(t *testing.T, cfg *talhelperCfg.TalhelperConfig) {
+func withSingleNodeFixture(t *testing.T) {
 	t.Helper()
-	prev := talassist.TalConfig
-	talassist.TalConfig = cfg
-	t.Cleanup(func() {
-		talassist.TalConfig = prev
-	})
+	previous := helper.TalEnv
+	helper.TalEnv = map[string]string{"MASTER1IP_IP": "10.0.0.1"}
+	t.Cleanup(func() { helper.TalEnv = previous })
 }
 
-func TestGenPlainAllNodesWithExtraArgs(t *testing.T) {
-	withTalConfigFixture(t, &talhelperCfg.TalhelperConfig{
-		ClusterName: "main",
-		Nodes: []talhelperCfg.Node{
-			{Hostname: "cp1", IPAddress: "10.0.0.1"},
-			{Hostname: "cp2", IPAddress: "10.0.0.2"},
-		},
-	})
-
+func TestGenPlainUsesSingleConfiguredNode(t *testing.T) {
+	withSingleNodeFixture(t)
 	cmds := GenPlain("health", "", []string{"-f"})
-	if len(cmds) != 2 {
-		t.Fatalf("expected 2 commands, got %d", len(cmds))
+	if len(cmds) != 1 {
+		t.Fatalf("expected 1 command, got %d", len(cmds))
 	}
-
-	for _, cmd := range cmds {
-		if !strings.Contains(cmd, " health ") {
-			t.Fatalf("expected health command, got %q", cmd)
-		}
-		if !strings.Contains(cmd, "--talosconfig "+helper.TalosConfigFile) {
-			t.Fatalf("expected talosconfig path, got %q", cmd)
-		}
-		if !strings.HasSuffix(cmd, " -f") {
-			t.Fatalf("expected extra args suffix, got %q", cmd)
-		}
+	if !strings.Contains(cmds[0], " -n 10.0.0.1") || !strings.Contains(cmds[0], "--talosconfig "+talosconfig.TalosconfigPath()) {
+		t.Fatalf("unexpected command %q", cmds[0])
+	}
+	if !strings.HasSuffix(cmds[0], " -f") {
+		t.Fatalf("expected extra flag, got %q", cmds[0])
 	}
 }
 
 func TestGenApplySingleNode(t *testing.T) {
-	withTalConfigFixture(t, &talhelperCfg.TalhelperConfig{
-		ClusterName: "main",
-		Nodes: []talhelperCfg.Node{
-			{Hostname: "cp1", IPAddress: "10.0.0.1"},
-			{Hostname: "cp2", IPAddress: "10.0.0.2"},
-		},
-	})
-
-	cmds := GenApply("10.0.0.2", nil)
+	withSingleNodeFixture(t)
+	cmds := GenApply("", []string{"--insecure"})
 	if len(cmds) != 1 {
 		t.Fatalf("expected 1 command, got %d", len(cmds))
 	}
-
-	cmd := cmds[0]
-	if !strings.Contains(cmd, " apply machineconfig ") {
-		t.Fatalf("expected apply machineconfig command, got %q", cmd)
+	if !strings.Contains(cmds[0], " apply-config ") || !strings.Contains(cmds[0], " -f "+talosconfig.ControlPlanePath()) {
+		t.Fatalf("unexpected command %q", cmds[0])
 	}
-	if !strings.Contains(cmd, " -n 10.0.0.2") {
-		t.Fatalf("expected selected node in command, got %q", cmd)
-	}
-	expectedFile := filepath.Join(helper.TalosGenerated, "main-cp2.yaml")
-	if !strings.Contains(cmd, " -f "+expectedFile) {
-		t.Fatalf("expected generated config path %q in command, got %q", expectedFile, cmd)
-	}
-}
-
-func TestGenPlainSingleNodeWithoutExtraArgs(t *testing.T) {
-	withTalConfigFixture(t, &talhelperCfg.TalhelperConfig{
-		ClusterName: "main",
-		Nodes: []talhelperCfg.Node{
-			{Hostname: "cp1", IPAddress: "10.0.0.1"},
-			{Hostname: "cp2", IPAddress: "10.0.0.2"},
-		},
-	})
-
-	cmds := GenPlain("kubeconfig", "10.0.0.1", nil)
-	if len(cmds) != 1 {
-		t.Fatalf("expected 1 command, got %d", len(cmds))
-	}
-
-	cmd := cmds[0]
-	if !strings.Contains(cmd, " kubeconfig ") {
-		t.Fatalf("expected kubeconfig command, got %q", cmd)
-	}
-	if !strings.Contains(cmd, " -n 10.0.0.1") {
-		t.Fatalf("expected selected node in command, got %q", cmd)
-	}
-	if strings.HasSuffix(cmd, " ") {
-		t.Fatalf("did not expect trailing space in command, got %q", cmd)
-	}
-}
-
-func TestGenApplyAllNodes(t *testing.T) {
-	withTalConfigFixture(t, &talhelperCfg.TalhelperConfig{
-		ClusterName: "main",
-		Nodes: []talhelperCfg.Node{
-			{Hostname: "cp1", IPAddress: "10.0.0.1"},
-			{Hostname: "cp2", IPAddress: "10.0.0.2"},
-		},
-	})
-
-	cmds := GenApply("", nil)
-	if len(cmds) != 2 {
-		t.Fatalf("expected 2 commands, got %d", len(cmds))
-	}
-
-	if !strings.Contains(cmds[0], " -f "+filepath.Join(helper.TalosGenerated, "main-cp1.yaml")) {
-		t.Fatalf("expected first node config path in first command, got %q", cmds[0])
-	}
-	if !strings.Contains(cmds[1], " -f "+filepath.Join(helper.TalosGenerated, "main-cp2.yaml")) {
-		t.Fatalf("expected second node config path in second command, got %q", cmds[1])
+	if !strings.Contains(cmds[0], " -n 10.0.0.1") || !strings.HasSuffix(cmds[0], " --insecure") {
+		t.Fatalf("unexpected node or flags in %q", cmds[0])
 	}
 }

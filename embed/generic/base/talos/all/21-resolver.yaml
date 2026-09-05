@@ -1,0 +1,7 @@
+apiVersion: v1alpha1
+kind: ResolverConfig
+nameservers:
+  - address: ${DNS_SERVER_0}
+  - address: ${DNS_SERVER_1}
+searchDomains:
+  disableDefault: true

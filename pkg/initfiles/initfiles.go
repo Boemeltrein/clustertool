@@ -19,7 +19,7 @@ import (
 	age "filippo.io/age"
 	"github.com/trueforge-org/clustertool/pkg/fluxhandler"
 	"github.com/trueforge-org/clustertool/pkg/helper"
-	"github.com/trueforge-org/clustertool/pkg/talassist"
+	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -30,8 +30,9 @@ func InitFiles() error {
 	genBaseFiles()
 	UpdateRootFiles()
 	UpdateBaseFiles()
-	talassist.GenSchema()
-	GenPatches()
+	if err := talosconfig.EnsureSecrets(); err != nil {
+		return err
+	}
 	genKubernetes()
 	GenTalEnvConfigMap()
 	UpdateGitRepo()
@@ -314,69 +315,6 @@ func ResetBootstrapValues() error {
 
 	log.Info().Msg("Bootstrap-Values.yaml Files reset successfully.")
 	return nil
-}
-
-func GenPatches() error {
-
-	err := fthelper.CopyDir(helper.PatchCache, path.Join(helper.ClusterPath, "/talos/patches"), true)
-	if err != nil {
-		log.Info().Msg("Error:")
-	} else {
-		log.Info().Msg("Patch files copied successfully.")
-	}
-
-	ageSecKey, err := GetSecKey()
-	fthelper.ReplaceInFile(filepath.Join(helper.ClusterPath+"/talos/patches", "sopssecret.yaml"), "REPLACEWITHSOPS", ageSecKey)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Error: %s")
-	}
-
-	setDocker()
-
-	return nil
-}
-
-func setDocker() {
-	// Assuming this is part of your function
-	if helper.TalEnv["DOCKERHUB_USER"] != "" && helper.TalEnv["DOCKERHUB_PASSWORD"] != "" {
-		// Prepare the content to append
-		configContent := fmt.Sprintf(`
-    # Add Dockerhub Login
-    config:
-      registry-1.docker.io:
-        auth:
-          username: "%s"
-          password: "%s"
-      docker.io:
-        auth:
-          username: "%s"
-          password: "%s"`, helper.TalEnv["DOCKERHUB_USER"], helper.TalEnv["DOCKERHUB_PASSWORD"], helper.TalEnv["DOCKERHUB_USER"], helper.TalEnv["DOCKERHUB_PASSWORD"])
-
-		// Open the file in append mode or create it if it doesn't exist
-		file, err := os.OpenFile(filepath.Join(helper.ClusterPath+"/talos/patches", "all.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Error opening file: %s")
-		}
-		defer file.Close()
-
-		// Write the content to the file
-		if _, err := file.Write([]byte(configContent)); err != nil {
-			log.Fatal().Err(err).Msg("Error writing to file: %s")
-		}
-	} else {
-		// Optional: Append a note if the environment variables are not set
-		emptyContent := `# No DockerHub credentials provided
-    `
-		file, err := os.OpenFile(filepath.Join(helper.ClusterPath+"/talos/patches", "all.yaml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Error opening file: %s")
-		}
-		defer file.Close()
-
-		if _, err := file.Write([]byte(emptyContent)); err != nil {
-			log.Fatal().Err(err).Msg("Error writing to file: %s")
-		}
-	}
 }
 
 func ageGen() error {

@@ -10,7 +10,6 @@ import (
 	"github.com/trueforge-org/clustertool/pkg/initfiles"
 	"github.com/trueforge-org/clustertool/pkg/nodestatus"
 	"github.com/trueforge-org/clustertool/pkg/sops"
-	"github.com/trueforge-org/clustertool/pkg/talassist"
 	fthelper "github.com/trueforge-org/forgetool/v4/pkg/helper"
 )
 
@@ -22,7 +21,7 @@ This is the recommended command for both initial cluster bootstrap and day-2 Tal
 ## Bootstrapping
 If the cluster has not been bootstrapped yet, Apply will automatically detect this and ask if you want to bootstrap the cluster
 
-Bootstrapping will apply your config to the first (top) controlplane node in your "talconfig.yaml", it then "bootstraps" hence creating a new cluster with said node.
+Bootstrapping applies the generated native Talos configuration to the single control-plane node and then bootstraps the cluster.
 
 After this is done, we apply a number of helm-charts and manifests by default such as:
 
@@ -71,8 +70,7 @@ var apply = &cobra.Command{
 		}
 
 		initfiles.LoadTalEnv(false)
-		talassist.LoadTalConfig()
-		bootstrapNode := talassist.TalConfig.Nodes[0].IPAddress
+		bootstrapNode := helper.TalEnv["MASTER1IP_IP"]
 
 		log.Info().Msgf("Checking if first node   is ready to recieve anything... %s", bootstrapNode)
 		status, err := nodestatus.WaitForHealth(bootstrapNode, []string{"running", "maintenance"})

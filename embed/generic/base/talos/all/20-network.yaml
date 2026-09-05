@@ -1,0 +1,13 @@
+apiVersion: v1alpha1
+kind: LinkConfig
+name: ${TALOS_INTERFACE}
+up: true
+addresses:
+  - address: ${MASTER1IP_CIDR}
+routes:
+  - gateway: ${GATEWAY}
+---
+apiVersion: v1alpha1
+kind: Layer2VIPConfig
+link: ${TALOS_INTERFACE}
+name: ${VIP_IP}

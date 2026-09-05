@@ -9,12 +9,10 @@ import (
 	"github.com/trueforge-org/clustertool/pkg/helper"
 	"github.com/trueforge-org/clustertool/pkg/initfiles"
 	"github.com/trueforge-org/clustertool/pkg/sops"
-	"github.com/trueforge-org/clustertool/pkg/talassist"
 )
 
 var upgradeLongHelp = strings.TrimSpace(`
-The "upgrade" command updates Talos to the latest version specified in talconfig.yaml for all nodes.
-It also applies any changed "extentions" and/or "overlays" specified there.
+The "upgrade" command updates the single Talos node to TALOS_VERSION from clusterenv.yaml.
 
 On top of this, after upgrading Talos on all nodes, it also executes kubernetes-upgrades for the whole cluster as well.
 
@@ -43,7 +41,6 @@ var upgrade = &cobra.Command{
 			log.Info().Msgf("Error decrypting files: %v\n", err)
 		}
 		initfiles.LoadTalEnv(false)
-		talassist.LoadTalConfig()
 
 		log.Info().Msg("Running Cluster Upgrade")
 

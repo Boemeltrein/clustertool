@@ -8,7 +8,6 @@ import (
 	"github.com/trueforge-org/clustertool/pkg/gencmd"
 	"github.com/trueforge-org/clustertool/pkg/initfiles"
 	"github.com/trueforge-org/clustertool/pkg/sops"
-	"github.com/trueforge-org/clustertool/pkg/talassist"
 )
 
 var advResetLongHelp = strings.TrimSpace(`
@@ -38,7 +37,6 @@ var reset = &cobra.Command{
 			log.Info().Msgf("Error decrypting files: %v\n", err)
 		}
 		initfiles.LoadTalEnv(false)
-		talassist.LoadTalConfig()
 
 		log.Info().Msg("Running Cluster node Reset")
 

@@ -1,51 +1,25 @@
 package gencmd
 
 import (
-	"io"
-	"os"
-	"strings"
-
-	"github.com/rs/zerolog/log"
-
-	"github.com/budimanjojo/talhelper/v3/pkg/generate"
 	"github.com/trueforge-org/clustertool/embed"
 	"github.com/trueforge-org/clustertool/pkg/helper"
-	"github.com/trueforge-org/clustertool/pkg/talassist"
+	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 )
 
-// TODO: remove talhelper dependency for cmd creation
 func GenUpgrade(node string, extraFlags []string) []string {
-	// TODO: get rid of this, due to double uncontrollable log output
-
-	upgradeStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	extraFlags = append(extraFlags, "--preserve")
-	err := generate.GenerateUpgradeCommand(talassist.TalConfig, helper.TalosGenerated, node, extraFlags, false)
-	
-	w.Close()
-	out, _ := io.ReadAll(r)
-	os.Stdout = upgradeStdout
-
-	sliceOut := strings.Split(string(out), ";\n")
-	talosPath := embed.GetTalosExec()
-	var slice []string
-	for _, str := range sliceOut {
-		if str != "" {
-			str = strings.ReplaceAll(str, "talosctl", talosPath)
-			slice = append(slice, str)
-		}
-
+	if node == "" {
+		node = helper.TalEnv["MASTER1IP_IP"]
 	}
-
-	if err != nil {
-		log.Fatal().Err(err).Msgf("failed to generate talosctl upgrade command: %s", err)
+	command := embed.GetTalosExec() + " upgrade --talosconfig " + talosconfig.TalosconfigPath() +
+		" -n " + node + " --image ghcr.io/siderolabs/installer:" + helper.TalEnv["TALOS_VERSION"] + " --preserve"
+	for _, flag := range extraFlags {
+		command += " " + flag
 	}
-	return slice
+	return []string{command}
 }
 
 func GenKubeUpgrade(node string) string {
 	talosPath := embed.GetTalosExec()
-	strout := talosPath + " upgrade-k8s --talosconfig " + helper.TalosConfigFile + " -n " + node
+	strout := talosPath + " upgrade-k8s --talosconfig " + talosconfig.TalosconfigPath() + " -n " + node
 	return strout
 }

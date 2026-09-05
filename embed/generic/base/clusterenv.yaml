@@ -4,6 +4,16 @@ VIP: 192.168.20.200
 ## Defines the MasterNode IP
 # Please be aware, we only support x86_64 for the first node, ARM will NOT work by default
 MASTER1IP: 192.168.20.210
+# Talos network interface and installation disk for the single node
+TALOS_INTERFACE: eth0
+INSTALL_DISK: /dev/sda
+# Talos release used for generated config and upgrades
+TALOS_VERSION: v1.14.0
+# Kubernetes release used by the generated Talos machine configuration
+KUBERNETES_VERSION: v1.37.0
+# DNS resolvers used by Talos
+DNS_SERVER_0: 1.1.1.1
+DNS_SERVER_1: 8.8.8.8
 # Defines the gateway for all nodes
 GATEWAY: 192.168.20.1
 # Defines the ip range metallb is allowed to use

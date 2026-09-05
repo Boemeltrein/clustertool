@@ -1,13 +1,11 @@
 package gencmd
 
 import (
-	"os"
-	"path/filepath"
+	"strings"
 
-	"github.com/rs/zerolog/log"
 	"github.com/trueforge-org/clustertool/embed"
 	"github.com/trueforge-org/clustertool/pkg/helper"
-	"github.com/trueforge-org/clustertool/pkg/talassist"
+	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 )
 
 func GenApply(node string, extraArgs []string) []string {
@@ -16,28 +14,12 @@ func GenApply(node string, extraArgs []string) []string {
 
 	talosPath := embed.GetTalosExec()
 	if node == "" {
-
-		for _, noderef := range talassist.TalConfig.Nodes {
-			filename := talassist.TalConfig.ClusterName + "-" + noderef.Hostname + ".yaml"
-			cmd := talosPath + " " + "apply machineconfig" + " -f " + filepath.Join(helper.TalosGenerated, filename) + " --talosconfig " + helper.TalosConfigFile + " -n " + noderef.IPAddress // + " " + strings.Join(extraArgs, " ")
-			commands = append(commands, cmd)
-		}
-	} else {
-		nodename := ""
-		for _, noderef := range talassist.TalConfig.Nodes {
-			if noderef.IPAddress == node {
-				nodename = noderef.Hostname
-			}
-		}
-		if nodename == "" {
-			log.Error().Msgf("Node IP %s, does not match any node in talconfig. Exiting...", node)
-			os.Exit(1)
-		}
-
-		filename := talassist.TalConfig.ClusterName + "-" + nodename + ".yaml"
-		cmd := talosPath + " " + "apply machineconfig" + " -f " + filepath.Join(helper.TalosGenerated, filename) + " --talosconfig " + helper.TalosConfigFile + " -n " + node // + " " + strings.Join(extraArgs, " ")
-		commands = append(commands, cmd)
+		node = helper.TalEnv["MASTER1IP_IP"]
 	}
-	log.Debug().Msgf("Apply Commands rendered: %s", commands)
+	cmd := talosPath + " apply-config -f " + talosconfig.ControlPlanePath() + " --talosconfig " + talosconfig.TalosconfigPath() + " -n " + node
+	if len(extraArgs) > 0 {
+		cmd += " " + strings.Join(extraArgs, " ")
+	}
+	commands = append(commands, cmd)
 	return commands
 }

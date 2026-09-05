@@ -6,7 +6,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/trueforge-org/clustertool/embed"
 	"github.com/trueforge-org/clustertool/pkg/helper"
-	"github.com/trueforge-org/clustertool/pkg/talassist"
+	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 )
 
 func GenPlain(command string, node string, extraArgs []string) []string {
@@ -18,20 +18,15 @@ func GenPlain(command string, node string, extraArgs []string) []string {
 	if node == "" {
 		log.Debug().Msg("Cmd Nodes is empty, rendering cmds for all nodes...")
 
-		for _, noderef := range talassist.TalConfig.Nodes {
-			log.Debug().Msgf("Rendering for node: %v", noderef)
-			cmd := talosPath + " " + command + " --talosconfig " + helper.TalosConfigFile + " -n " + noderef.IPAddress
-			if len(extraArgs) == 0 {
-				log.Debug().Msg("extraArgs is empty, not adding extra args to cmd")
-			} else {
-				log.Debug().Msgf("extraArgs not empty, adding extra args to cmd: %s", extraArgs)
-				cmd = cmd + " " + strings.Join(extraArgs, " ")
-			}
-			commands = append(commands, cmd)
+		node = helper.TalEnv["MASTER1IP_IP"]
+		cmd := talosPath + " " + command + " --talosconfig " + talosconfig.TalosconfigPath() + " -n " + node
+		if len(extraArgs) > 0 {
+			cmd += " " + strings.Join(extraArgs, " ")
 		}
+		commands = append(commands, cmd)
 	} else {
 		log.Debug().Msgf("Rendering for single node: %s", node)
-		cmd := talosPath + " " + command + " --talosconfig " + helper.TalosConfigFile + " -n " + node
+		cmd := talosPath + " " + command + " --talosconfig " + talosconfig.TalosconfigPath() + " -n " + node
 		if len(extraArgs) == 0 {
 			log.Debug().Msg("extraArgs is empty, not adding extra args to cmd")
 		} else {

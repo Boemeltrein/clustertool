@@ -12,7 +12,6 @@ import (
 	"github.com/trueforge-org/clustertool/pkg/kubectlcmds"
 	"github.com/trueforge-org/clustertool/pkg/nodestatus"
 	"github.com/trueforge-org/clustertool/pkg/sops"
-	"github.com/trueforge-org/clustertool/pkg/talassist"
 )
 
 var HelmRepos map[string]*fluxhandler.HelmRepo
@@ -33,7 +32,7 @@ func RunBootstrap(args []string) {
 		log.Info().Msgf("Error decrypting files: %v\n", err)
 	}
 
-	bootstrapNode := talassist.TalConfig.Nodes[0].IPAddress
+	bootstrapNode := helper.TalEnv["MASTER1IP_IP"]
 
 	nodestatus.WaitForHealth(bootstrapNode, []string{"maintenance"})
 
