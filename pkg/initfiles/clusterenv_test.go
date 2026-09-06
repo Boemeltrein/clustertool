@@ -31,7 +31,7 @@ func TestRepeatedLoadTalEnvKeepsEnvironmentBounded(t *testing.T) {
 	})
 	helper.ClusterPath = t.TempDir()
 	helper.TalEnv = map[string]string{}
-	source := "MASTER1IP: 192.168.1.151/24\nVIP: 192.168.1.150\nGATEWAY: 192.168.1.1\nHEADLAMP_IP: 192.168.1.152\nPODNET: 172.16.0.0/16\nSVCNET: 172.17.0.0/16\n"
+	source := "MASTER1IP: 192.0.2.151/24\nVIP: 192.0.2.150\nGATEWAY: 192.0.2.1\nHEADLAMP_IP: 192.0.2.152\nPODNET: 198.51.100.0/24\nSVCNET: 203.0.113.0/24\n"
 	if err := os.WriteFile(filepath.Join(helper.ClusterPath, "clusterenv.yaml"), []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestRepeatedLoadTalEnvKeepsEnvironmentBounded(t *testing.T) {
 			t.Fatalf("load %d changed the environment", i)
 		}
 	}
-	if helper.TalEnv["MASTER1IP_IP"] != "192.168.1.151" || helper.TalEnv["MASTER1IP_CIDR"] != "192.168.1.151/24" {
+	if helper.TalEnv["MASTER1IP_IP"] != "192.0.2.151" || helper.TalEnv["MASTER1IP_CIDR"] != "192.0.2.151/24" {
 		t.Fatal("node address normalization changed")
 	}
 	// A child process must still be launchable with the repeatedly loaded environment.
