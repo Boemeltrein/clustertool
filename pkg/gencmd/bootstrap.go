@@ -46,7 +46,7 @@ func RunBootstrap(args []string) error {
 		return err
 	}
 
-	log.Info().Msgf("Bootstrap: At this point your system is installed to disk, please make sure not to reboot into the installer ISO/USB  %s", bootstrapNode)
+	log.Info().Msgf("Bootstrap: node %s is booting; disk installation may still be in progress. If bootstrap remains unavailable, inspect Talos installation logs and the disk selector.", bootstrapNode)
 
 	log.Info().Msgf("Bootstrap: running bootstrap on node:  %s", bootstrapNode)
 	bootstrapcmds := GenPlain("bootstrap", bootstrapNode, nil)

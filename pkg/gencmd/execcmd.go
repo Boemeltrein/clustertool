@@ -20,8 +20,11 @@ func ExecCmd(cmd string) error {
 		if err == nil {
 			return nil
 		}
-		if !strings.Contains(cmd, " bootstrap ") || !strings.Contains(string(out), "bootstrap is not available yet") || time.Now().After(deadline) {
+		if !strings.Contains(cmd, " bootstrap ") || !strings.Contains(string(out), "bootstrap is not available yet") {
 			return fmt.Errorf("Talos command failed: %w: %s", err, strings.TrimSpace(string(out)))
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("bootstrap is still unavailable: Talos may still be installing or installation may have failed; inspect talosctl dmesg and get disks, then check provisioning.diskSelector.match: %w: %s", err, strings.TrimSpace(string(out)))
 		}
 		time.Sleep(5 * time.Second)
 	}

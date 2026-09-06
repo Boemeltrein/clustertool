@@ -72,7 +72,7 @@ migration; init does not translate arbitrary customizations.
 
 | Previous configuration | New file under `talos/` |
 | --- | --- |
-| Install disk at most 1600 GB; no disk wipe | `all/00-install.yaml` (CEL uses bytes: `disk.size <= 1600000000000u`) |
+| Install disk at most 1600 GB; no disk wipe | `all/00-install.yaml` (`disk.size <= 1600u * GB`, excluding loop devices, read-only devices and CD-ROMs) |
 | Hostname `k8s-control-1` | `all/01-hostname.yaml` |
 | Machine certificate SANs `127.0.0.1` and VIP | `all/02-machine.yaml` |
 | Cluster pod/service networks | `all/10-cluster.yaml` |
@@ -95,6 +95,22 @@ are in `control-plane/10-kubernetes.yaml`. The two existing storage mounts requi
 The generated `KubeletConfig` document is deleted to avoid conflicting configuration.
 The machine certificate SANs and etcd metrics also use official legacy fields.
 These remain loose YAML patches; no replacement configuration schema is introduced.
+
+## Select the actual installation disk
+
+Inspect `talosctl get disks` on the target node before installation. A maximum
+size alone also matches small loop devices; the template explicitly excludes
+those and read-only/CD-ROM devices, and preserves the legacy selector's
+`disk.transport != ""` condition. It can still match multiple writable disks.
+Refine `provisioning.diskSelector.match` to the intended disk's `disk.serial` or
+`disk.dev_path`. For example, **only if your disk inventory identifies `/dev/sda`
+as the intended installation disk**, use `disk.dev_path == "/dev/sda"`.
+
+Sizes in CEL use multiplication, e.g. `disk.size <= 2u * TB`, not `disk.size <= 2TB`.
+The `booting` machine stage does not confirm installation has succeeded. If Talos
+reports `bootstrap is not available yet`, inspect `talosctl dmesg` for installation
+errors before retrying. Replacing the clustertool binary does not overwrite your
+existing loose YAML files; update your own disk selector as well.
 
 ## Existing cluster migration: preserve PKI first
 
