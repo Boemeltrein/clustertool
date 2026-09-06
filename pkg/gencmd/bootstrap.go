@@ -2,8 +2,10 @@ package gencmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/rs/zerolog/log"
 
@@ -16,47 +18,55 @@ import (
 
 var HelmRepos map[string]*fluxhandler.HelmRepo
 
-var manifestPaths = []string{
-	filepath.Join(helper.KubernetesPath, "flux-system", "flux", "sopssecret.secret.yaml"),
-	filepath.Join(helper.KubernetesPath, "flux-system", "flux", "deploykey.secret.yaml"),
-	filepath.Join(helper.KubernetesPath, "flux-system", "flux", "clustersettings.secret.yaml"),
-}
-
-func RunBootstrap(args []string) {
-	var extraArgs []string
-	if len(args) > 1 {
-		extraArgs = args[1:]
+func RunBootstrap(args []string) error {
+	extraArgs := args
+	manifestPaths := []string{
+		filepath.Join(helper.KubernetesPath, "flux-system", "flux", "sopssecret.secret.yaml"),
+		filepath.Join(helper.KubernetesPath, "flux-system", "flux", "deploykey.secret.yaml"),
+		filepath.Join(helper.KubernetesPath, "flux-system", "flux", "clustersettings.secret.yaml"),
 	}
 
 	if err := sops.DecryptFiles(); err != nil {
-		log.Info().Msgf("Error decrypting files: %v\n", err)
+		return err
 	}
 
 	bootstrapNode := helper.TalEnv["MASTER1IP_IP"]
 
-	nodestatus.WaitForHealth(bootstrapNode, []string{"maintenance"})
+	if _, err := nodestatus.WaitForHealth(bootstrapNode, []string{"maintenance"}); err != nil {
+		return err
+	}
 
 	taloscmds := GenApply(bootstrapNode, extraArgs)
 
-	ExecCmds(taloscmds, false)
+	if err := ExecCmds(taloscmds, false); err != nil {
+		return err
+	}
 
-	nodestatus.WaitForHealth(bootstrapNode, []string{"booting"})
+	if _, err := nodestatus.WaitForHealth(bootstrapNode, []string{"booting"}); err != nil {
+		return err
+	}
 
 	log.Info().Msgf("Bootstrap: At this point your system is installed to disk, please make sure not to reboot into the installer ISO/USB  %s", bootstrapNode)
 
 	log.Info().Msgf("Bootstrap: running bootstrap on node:  %s", bootstrapNode)
-	bootstrapcmds := GenPlain("bootstrap", bootstrapNode, extraArgs)
+	bootstrapcmds := GenPlain("bootstrap", bootstrapNode, nil)
 
-	ExecCmd(bootstrapcmds[0])
+	if err := ExecCmd(bootstrapcmds[0]); err != nil {
+		return err
+	}
 
 	log.Info().Msgf("Bootstrap: waiting for VIP %v to come online...", helper.TalEnv["VIP_IP"])
-	nodestatus.WaitForHealth(helper.TalEnv["VIP_IP"], []string{"running"})
+	if _, err := nodestatus.WaitForHealth(helper.TalEnv["VIP_IP"], []string{"running"}); err != nil {
+		return err
+	}
 
 	log.Info().Msgf("Bootstrap: Configuring kubeconfig/kubectl for VIP: %v", helper.TalEnv["VIP_IP"])
 	// Ensure kubeconfig is loaded
 
 	kubeconfigcmds := GenPlain("kubeconfig", helper.TalEnv["VIP_IP"], []string{"-f"})
-	ExecCmd(kubeconfigcmds[0])
+	if err := ExecCmd(kubeconfigcmds[0]); err != nil {
+		return err
+	}
 
 	// Desired pod names
 	requiredPods := []string{
@@ -69,19 +79,22 @@ func RunBootstrap(args []string) {
 	if err := kubectlcmds.CheckStatus(requiredPods, []string{}, 600); err != nil {
 		log.Error().Err(err).Msgf("Error: %v\n", err)
 
-		os.Exit(1)
+		return fmt.Errorf("bootstrap failed: %w", err)
 	}
 
 	log.Info().Msg("Bootstrap: Starting Cluster configuration...")
 	// Start process to approve any cert requests till our manifests are loaded
 	// Set up a signal handler to handle termination gracefully
 	stopCh := make(chan struct{})
+	var stopOnce sync.Once
+	stopApprover := func() { stopOnce.Do(func() { close(stopCh) }) }
+	defer stopApprover()
 
 	// Get Kubernetes clientset
 	clientset, err := kubectlcmds.GetClientset()
 	if err != nil {
 		log.Info().Msgf("Error getting Kubernetes clientset: %v", err)
-		return
+		return err
 	}
 	ctx := context.Background()
 
@@ -91,7 +104,7 @@ func RunBootstrap(args []string) {
 	// Added by Boemeltrein, for linting purposes
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to load Helm repositories")
-		return
+		return err
 	}
 
 	// Call ApprovePendingCertificates with clientset and stopCh
@@ -130,14 +143,14 @@ func RunBootstrap(args []string) {
 
 	if err != nil {
 		log.Info().Msgf("Error walking the path: %v\n", err)
-		return
+		return err
 	}
 
 	for _, filePath := range namespaceFilePaths {
 		log.Info().Msgf("Bootstrap: Loading namespace: %v", filePath)
 		if err := kubectlcmds.KubectlApply(ctx, filePath); err != nil {
 			log.Info().Msgf("Error applying manifest for %s: %v\n", filepath.Base(filePath), err)
-			os.Exit(1)
+			return fmt.Errorf("bootstrap failed: %w", err)
 		}
 	}
 
@@ -145,15 +158,17 @@ func RunBootstrap(args []string) {
 		log.Info().Msgf("Bootstrap: Loading Manifest: %v", filePath)
 		if err := kubectlcmds.KubectlApply(ctx, filePath); err != nil {
 			log.Info().Msgf("Error applying manifest for %s: %v\n", filepath.Base(filePath), err)
-			os.Exit(1)
+			return fmt.Errorf("bootstrap failed: %w", err)
 		}
 	}
 
 	log.Info().Msg("Bootstrap: Base Cluster Configuration Completed, continuing setup...")
 	log.Info().Msg("Bootstrap: Confirming cluster health...")
 	healthcmd := GenPlain("health", helper.TalEnv["VIP_IP"], []string{})
-	ExecCmd(healthcmd[0])
-	close(stopCh)
+	if err := ExecCmd(healthcmd[0]); err != nil {
+		return err
+	}
+	stopApprover()
 
 	prioCharts := []fluxhandler.HelmChart{
 		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/cert-manager/app"), Retry: false, Wait: false},
@@ -185,7 +200,7 @@ func RunBootstrap(args []string) {
 	if err := kubectlcmds.CheckStatus(requiredMLBPods, []string{}, 600); err != nil {
 		log.Error().Err(err).Msgf("Error: %v\n", err)
 
-		os.Exit(1)
+		return fmt.Errorf("bootstrap failed: %w", err)
 	}
 
 	lateCharts := []fluxhandler.HelmChart{
@@ -198,7 +213,7 @@ func RunBootstrap(args []string) {
 		log.Info().Msgf("Bootstrap: Loading VolumeSnapshotClass: %v", filePath)
 		if err := kubectlcmds.KubectlApply(ctx, filePath); err != nil {
 			log.Info().Msgf("Error applying manifest for %s: %v\n", filepath.Base(filePath), err)
-			os.Exit(1)
+			return fmt.Errorf("bootstrap failed: %w", err)
 		}
 	}
 
@@ -219,4 +234,5 @@ func RunBootstrap(args []string) {
 	fluxhandler.FluxBootstrap(ctx)
 
 	log.Info().Msg("Bootstrap: Completed Successfully!")
+	return nil
 }

@@ -1,7 +1,7 @@
 package gencmd
 
 import (
-	"os"
+	"fmt"
 	"path"
 
 	"github.com/rs/zerolog/log"
@@ -15,13 +15,14 @@ import (
 
 func GenConfig(args []string) error {
 	if initfiles.CheckRunAgainFileExists() {
-		log.Fatal().Msg("You need to re-run Init. Exiting...")
-		os.Exit(1)
+		return fmt.Errorf("run init again after completing clusterenv.yaml")
 	}
 	if err := sops.DecryptFiles(); err != nil {
-		log.Info().Msgf("Error decrypting files: %v\n", err)
+		return err
 	}
-	initfiles.GenTalEnvConfigMap()
+	if err := initfiles.GenTalEnvConfigMap(); err != nil {
+		return err
+	}
 	initfiles.CheckEnvVariables()
 	if err := talosconfig.Generate(); err != nil {
 		return err
@@ -29,10 +30,10 @@ func GenConfig(args []string) error {
 	initfiles.UpdateGitRepo()
 
 	if err := fluxhandler.ProcessDirectory(path.Join(helper.ClusterPath, "kubernetes")); err != nil {
-		log.Info().Msgf("Error: %v", err)
+		return err
 	}
 	if err := fluxhandler.ProcessDirectory(path.Join(helper.ClusterPath, "kubernetes")); err != nil {
-		log.Info().Msgf("Error: %v", err)
+		return err
 	} else {
 		log.Info().Msgf("Kustomizations processed successfully.")
 	}

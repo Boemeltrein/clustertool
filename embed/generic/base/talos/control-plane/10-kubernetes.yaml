@@ -8,6 +8,9 @@ allowedKubernetesNamespaces:
 apiVersion: v1alpha1
 kind: KubeAPIServerConfig
 image: registry.k8s.io/kube-apiserver:v1.37.0
+certExtraSANs:
+  - 127.0.0.1
+  - ${VIP_IP}
 extraArgs:
   enable-aggregator-routing: "true"
 ---
@@ -44,6 +47,8 @@ apiVersion: v1alpha1
 kind: KubeProxyConfig
 image: registry.k8s.io/kube-proxy:v1.37.0
 enabled: false
+config:
+  metricsBindAddress: 0.0.0.0:10249
 ---
 apiVersion: v1alpha1
 kind: KubeFlannelCNIConfig

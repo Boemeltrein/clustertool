@@ -1,17 +1,33 @@
+# Talos 1.14 KubeletConfig cannot represent extraMounts. Keep this official
+# legacy block until Talos provides an equivalent; never drop the storage mounts.
+machine:
+  kubelet:
+    image: ghcr.io/siderolabs/kubelet:v1.37.0
+    extraArgs:
+      rotate-server-certificates: "true"
+    extraConfig:
+      maxPods: 250
+      shutdownGracePeriod: 15s
+      shutdownGracePeriodCriticalPods: 10s
+      imageGCHighThresholdPercent: 50
+      imageGCLowThresholdPercent: 30
+      imageMinimumGCAge: "30m"
+    extraMounts:
+      - destination: /var/openebs/local
+        type: bind
+        source: /var/openebs/local
+        options: [bind, rshared, rw]
+      - destination: /var/lib/longhorn
+        type: bind
+        source: /var/lib/longhorn
+        options: [bind, rshared, rw]
+---
+apiVersion: v1alpha1
+kind: KubeletConfig
+$patch: delete
+---
 apiVersion: v1alpha1
 kind: KubeNodeConfig
 taints:
   node-role.kubernetes.io/control-plane:
     $patch: delete
----
-apiVersion: v1alpha1
-kind: KubeletConfig
-image: ghcr.io/siderolabs/kubelet:v1.37.0
-extraArgs:
-  rotate-server-certificates: "true"
-config:
-  maxPods: 250
-  maxParallelImagePulls: 3
-  serializeImagePulls: false
-  shutdownGracePeriod: 15s
-  shutdownGracePeriodCriticalPods: 10s

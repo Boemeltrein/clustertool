@@ -20,14 +20,17 @@ var health = &cobra.Command{
 	Short:   "Check Talos Cluster Health",
 	Example: "clustertool talos health",
 	Long:    advHealthLongHelp,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := sops.DecryptFiles(); err != nil {
-			log.Info().Msgf("Error decrypting files: %v\n", err)
+			return err
 		}
 		initfiles.LoadTalEnv(false)
 		log.Info().Msg("Running Cluster HealthCheck")
 		healthcmd := gencmd.GenPlain("health", helper.TalEnv["VIP_IP"], []string{})
-		gencmd.ExecCmd(healthcmd[0])
+		if err := gencmd.ExecCmd(healthcmd[0]); err != nil {
+			return err
+		}
+		return nil
 	},
 }
 

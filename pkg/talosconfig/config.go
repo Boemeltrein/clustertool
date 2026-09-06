@@ -11,7 +11,6 @@ import (
 
 	"github.com/trueforge-org/clustertool/embed"
 	"github.com/trueforge-org/clustertool/pkg/helper"
-	fthelper "github.com/trueforge-org/forgetool/v4/pkg/helper"
 )
 
 const (
@@ -42,24 +41,51 @@ func EnsureSecrets() error {
 		return fmt.Errorf("check Talos secrets: %w", err)
 	}
 
+	if err := checkLegacyPKI(); err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(filepath.Dir(secretPath), 0o700); err != nil {
 		return fmt.Errorf("create Talos directory: %w", err)
 	}
 
-	if err := runTalosctl("gen", "secrets", "--output-file", secretPath); err != nil {
-		return fmt.Errorf("generate Talos secrets: %w", err)
+	dir, err := os.MkdirTemp(helper.TalosPath, ".secrets-")
+	if err != nil {
+		return err
 	}
-
-	if err := os.Chmod(secretPath, 0o600); err != nil {
-		return fmt.Errorf("protect Talos secrets: %w", err)
+	defer os.RemoveAll(dir)
+	temporary := filepath.Join(dir, "secrets.yaml")
+	if err := runTalosctl("gen", "secrets", "--output-file", temporary); err != nil {
+		return err
 	}
-
-	return nil
+	data, err := os.ReadFile(temporary)
+	if err != nil {
+		return err
+	}
+	// Exclusive creation protects a concurrent init's existing identity too.
+	file, err := os.OpenFile(secretPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 // Generate builds a native Talos control-plane configuration using the stable
 // secrets bundle and the documents in all/ and control-plane/.
 func Generate() error {
+	if err := ValidateNode(""); err != nil {
+		return err
+	}
+	if _, err := os.Stat(filepath.Join(helper.TalosPath, "talconfig.yaml")); err == nil {
+		return fmt.Errorf("legacy talconfig.yaml exists: migrate its settings first (docs/native-talos.md)")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
 	if _, err := os.Stat(SecretsPath()); err != nil {
 		return fmt.Errorf("Talos secrets are missing; run clustertool init first: %w", err)
 	}
@@ -69,7 +95,7 @@ func Generate() error {
 		endpoint = "https://" + helper.TalEnv["MASTER1IP_IP"] + ":6443"
 	}
 
-	workDir, err := os.MkdirTemp("", "clustertool-talos-")
+	workDir, err := os.MkdirTemp(helper.TalosPath, ".generate-")
 	if err != nil {
 		return fmt.Errorf("create temporary Talos directory: %w", err)
 	}
@@ -78,10 +104,9 @@ func Generate() error {
 	if err := runTalosctl(
 		"gen", "config", helper.ClusterName, endpoint,
 		"--with-secrets", SecretsPath(),
-		"--additional-sans", "127.0.0.1,"+helper.TalEnv["VIP_IP"],
-		"--output-dir", workDir,
+		"--output", workDir,
 		"--output-types", "controlplane,talosconfig",
-		"--force",
+		"--with-docs=false", "--with-examples=false",
 	); err != nil {
 		return fmt.Errorf("generate Talos base configuration: %w", err)
 	}
@@ -91,7 +116,8 @@ func Generate() error {
 		return err
 	}
 
-	if err := os.MkdirAll(helper.TalosGenerated, 0o700); err != nil {
+	staged := filepath.Join(workDir, "validated")
+	if err := os.MkdirAll(staged, 0o700); err != nil {
 		return fmt.Errorf("create generated Talos directory: %w", err)
 	}
 
@@ -99,28 +125,34 @@ func Generate() error {
 	for _, patch := range patches {
 		args = append(args, "--patch", "@"+patch)
 	}
-	args = append(args, "--output", ControlPlanePath())
+	output := filepath.Join(staged, ControlPlaneFilename)
+	args = append(args, "--output", output)
 	if err := runTalosctl(args...); err != nil {
 		return fmt.Errorf("apply Talos configuration documents: %w", err)
 	}
 
-	if err := os.Chmod(ControlPlanePath(), 0o600); err != nil {
+	if err := os.Chmod(output, 0o600); err != nil {
 		return fmt.Errorf("protect generated control-plane configuration: %w", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(workDir, "talosconfig"))
+	if err := runTalosctl("validate", "--config", output, "--mode", "metal"); err != nil {
+		return err
+	}
+	tc := filepath.Join(workDir, "talosconfig")
+	for _, field := range []string{"endpoint", "node"} {
+		if err := runTalosctl("--talosconfig", tc, "config", field, helper.TalEnv["MASTER1IP_IP"]); err != nil {
+			return err
+		}
+	}
+	data, err := os.ReadFile(tc)
 	if err != nil {
 		return fmt.Errorf("read generated talosconfig: %w", err)
 	}
-	if err := os.WriteFile(TalosconfigPath(), data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(staged, TalosconfigFilename), data, 0o600); err != nil {
 		return fmt.Errorf("write generated talosconfig: %w", err)
 	}
 
-	if err := runTalosctl("validate", "--config", ControlPlanePath(), "--mode", "metal"); err != nil {
-		return fmt.Errorf("validate generated Talos configuration: %w", err)
-	}
-
-	return nil
+	return publish(staged)
 }
 
 func renderPatches(workDir string) ([]string, error) {
@@ -131,27 +163,37 @@ func renderPatches(workDir string) ([]string, error) {
 	} {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
 			return nil, fmt.Errorf("read Talos document directory %s: %w", dir, err)
 		}
+		count := 0
 		for _, entry := range entries {
 			if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
 				sourceFiles = append(sourceFiles, filepath.Join(dir, entry.Name()))
+				count++
 			}
+		}
+		if count == 0 {
+			return nil, fmt.Errorf("no Talos documents in %s", dir)
 		}
 	}
 
 	sort.Strings(sourceFiles)
+	user, pass := helper.TalEnv["DOCKERHUB_USER"], helper.TalEnv["DOCKERHUB_PASSWORD"]
+	if (user == "") != (pass == "") {
+		return nil, fmt.Errorf("set both DOCKERHUB_USER and DOCKERHUB_PASSWORD or neither")
+	}
+	if user != "" {
+		sourceFiles = append(sourceFiles, filepath.Join(helper.TalosPath, "optional", "44-registry-auth.yaml"))
+	}
 	rendered := make([]string, 0, len(sourceFiles))
 	for index, source := range sourceFiles {
-		content, err := fthelper.EnvSubst(source, helper.TalEnv)
+		raw, err := os.ReadFile(source)
+		if err != nil {
+			return nil, err
+		}
+		content, err := render(raw, helper.TalEnv)
 		if err != nil {
 			return nil, fmt.Errorf("render Talos document %s: %w", source, err)
-		}
-		if strings.Contains(content, "${") {
-			return nil, fmt.Errorf("Talos document %s contains an unresolved variable", source)
 		}
 		target := filepath.Join(workDir, fmt.Sprintf("patch-%03d.yaml", index))
 		if err := os.WriteFile(target, []byte(content), 0o600); err != nil {

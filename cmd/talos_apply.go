@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -10,11 +11,12 @@ import (
 	"github.com/trueforge-org/clustertool/pkg/initfiles"
 	"github.com/trueforge-org/clustertool/pkg/nodestatus"
 	"github.com/trueforge-org/clustertool/pkg/sops"
+	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 	fthelper "github.com/trueforge-org/forgetool/v4/pkg/helper"
 )
 
 var applyLongHelp = strings.TrimSpace(`
-The "apply" command applies your Talos System configuration to each node in the cluster, existing or new It also runs automated checking of your config file and health checks between each node it has processed, to ensure you don't accidentally take down your whole cluster.
+The "apply" command validates and applies your Talos configuration to the configured single control-plane node, existing or new.
 
 This is the recommended command for both initial cluster bootstrap and day-2 Talos config maintenance.
 
@@ -51,7 +53,7 @@ var apply = &cobra.Command{
 	Aliases: []string{"apply-config"},
 	Example: "clustertool talos apply <NodeIP>",
 	Long:    applyLongHelp,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		var extraArgs []string
 		node := ""
 
@@ -66,56 +68,54 @@ var apply = &cobra.Command{
 		}
 
 		if err := sops.DecryptFiles(); err != nil {
-			log.Info().Msgf("Error decrypting files: %v\n", err)
+			return err
 		}
 
 		initfiles.LoadTalEnv(false)
+		if err := talosconfig.ValidateNode(node); err != nil {
+			return err
+		}
+		if err := gencmd.ValidateExtraArgs(extraArgs); err != nil {
+			return err
+		}
+		if err := gencmd.GenConfig(nil); err != nil {
+			return err
+		}
 		bootstrapNode := helper.TalEnv["MASTER1IP_IP"]
 
 		log.Info().Msgf("Checking if first node   is ready to recieve anything... %s", bootstrapNode)
 		status, err := nodestatus.WaitForHealth(bootstrapNode, []string{"running", "maintenance"})
 		if err != nil {
-
-		} else if status == "maintenance" {
-			bootstrapNeeded, err := nodestatus.CheckNeedBootstrap(bootstrapNode)
-			if err != nil {
-
-			} else if bootstrapNeeded {
-				log.Info().Msg("First Node requires to be bootstrapped before it can be used.")
-				if fthelper.GetYesOrNo("Do you want to bootstrap now? (yes/no) [y/n]: ", false) {
-					gencmd.RunBootstrap(extraArgs)
-					if fthelper.GetYesOrNo("Do you want to apply config to all remaining clusternodes as well? (yes/no) [y/n]: ", false) {
-						RunApply(false, "", extraArgs)
-					}
-				} else {
-					log.Info().Msg("Exiting bootstrap, as apply is not possible...")
-				}
-
-			} else {
-				log.Info().Msg("Detected maintenance mode, but first node does not require to be bootrapped.")
-				log.Info().Msg("Assuming apply is requested... continuing with Apply...")
-				RunApply(true, node, extraArgs)
-			}
-
-		} else if status == "running" {
-			log.Info().Msg("Apply: running first controlnode detected, continuing...")
-			RunApply(true, node, extraArgs)
+			return err
 		}
+		if status == "maintenance" {
+			needed, err := nodestatus.CheckNeedBootstrap(bootstrapNode)
+			if err != nil {
+				return err
+			}
+			if needed {
+				if !fthelper.GetYesOrNo("Bootstrap this new single-node cluster? [y/n]: ", false) {
+					return fmt.Errorf("bootstrap cancelled")
+				}
+				return gencmd.RunBootstrap(extraArgs)
+			}
+		}
+		return RunApply(true, node, extraArgs)
 	},
 }
 
-func RunApply(kubeconfig bool, node string, extraArgs []string) {
+func RunApply(kubeconfig bool, node string, extraArgs []string) error {
 	taloscmds := gencmd.GenApply(node, extraArgs)
-	gencmd.ExecCmds(taloscmds, true)
+	if err := gencmd.ExecCmds(taloscmds, true); err != nil {
+		return err
+	}
 
 	if kubeconfig {
 		kubeconfigcmds := gencmd.GenPlain("kubeconfig", helper.TalEnv["VIP_IP"], []string{"-f"})
-		gencmd.ExecCmd(kubeconfigcmds[0])
+		return gencmd.ExecCmd(kubeconfigcmds[0])
 	}
 
-	//if helper.GetYesOrNo("Do you want to (re)load ssh, Sops and ClusterEnv onto the cluster? (yes/no) [y/n]: ") {
-	//
-	//}
+	return nil
 }
 
 func init() {

@@ -3,3 +3,7 @@ talos/generated/
 sopssecret.secret.yaml
 cluster/main/kubernetes/**/bootstrap-values.yaml.ct
 *kubeconfig
+
+talos/.generate-*/
+talos/.secrets-*/
+talos/generated.previous/

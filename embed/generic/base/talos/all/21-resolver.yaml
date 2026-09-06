@@ -3,5 +3,7 @@ kind: ResolverConfig
 nameservers:
   - address: 1.1.1.1
   - address: 8.8.8.8
-searchDomains:
-  disableDefault: true
+hostDNS:
+  enabled: true
+  forwardKubeDNSToHost: true
+  resolveMemberNames: true

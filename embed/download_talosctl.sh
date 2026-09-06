@@ -4,8 +4,8 @@
 set -euo pipefail
 
 # Define the version
-# renovate: datasource=docker depName=ghcr.io/siderolabs/installer
-version="v1.13.10"
+# renovate: datasource=github-releases depName=siderolabs/talos
+version="v1.14.0"
 
 # Define the OS and architecture combinations
 combinations=(
@@ -14,6 +14,7 @@ combinations=(
     "darwin amd64"
     "darwin arm64"
     "windows amd64"
+    "windows arm64"
     "freebsd amd64"
     "freebsd arm64"
 )
@@ -49,7 +50,7 @@ for combo in "${combinations[@]}"; do
 
     # Download the file
     echo "Downloading ${download_url}..."
-    curl -L -o "${file_name}" "${download_url}"
+    curl --fail --retry 3 -L -o "${file_name}" "${download_url}"
 
     # Handle different file types
     if [ "$file_extension" == "exe" ]; then

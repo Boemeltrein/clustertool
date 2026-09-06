@@ -12,9 +12,9 @@ import (
 )
 
 var upgradeLongHelp = strings.TrimSpace(`
-The "upgrade" command updates the single Talos node using the installer image provided by talosctl.
+The "upgrade" command updates the single Talos node using the installer image from the validated configuration, including its schematic ID.
 
-On top of this, after upgrading Talos on all nodes, it also executes kubernetes-upgrades for the whole cluster as well.
+After upgrading Talos, it upgrades Kubernetes to the configured kubelet version.
 
 `)
 
@@ -23,7 +23,7 @@ var upgrade = &cobra.Command{
 	Short:   "Upgrade Talos Nodes and Kubernetes",
 	Example: "clustertool talos upgrade <NodeIP>",
 	Long:    upgradeLongHelp,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		var extraArgs []string
 		node := ""
 
@@ -38,23 +38,39 @@ var upgrade = &cobra.Command{
 		}
 
 		if err := sops.DecryptFiles(); err != nil {
-			log.Info().Msgf("Error decrypting files: %v\n", err)
+			return err
 		}
 		initfiles.LoadTalEnv(false)
 
 		log.Info().Msg("Running Cluster Upgrade")
 
-		taloscmds := gencmd.GenUpgrade(node, extraArgs)
-		gencmd.ExecCmds(taloscmds, true)
+		if err := gencmd.GenConfig(nil); err != nil {
+			return err
+		}
+		taloscmds, err := gencmd.GenUpgrade(node, extraArgs)
+		if err != nil {
+			return err
+		}
+		if err := gencmd.ExecCmds(taloscmds, true); err != nil {
+			return err
+		}
 
 		log.Info().Msg("Running Kubernetes Upgrade")
-		kubeUpgradeCmd := gencmd.GenKubeUpgrade(helper.TalEnv["VIP_IP"])
-		gencmd.ExecCmd(kubeUpgradeCmd)
+		kubeUpgradeCmd, err := gencmd.GenKubeUpgrade(helper.TalEnv["MASTER1IP_IP"])
+		if err != nil {
+			return err
+		}
+		if err := gencmd.ExecCmd(kubeUpgradeCmd); err != nil {
+			return err
+		}
 
 		log.Info().Msg("(re)Loading KubeConfig)")
 		kubeconfigcmds := gencmd.GenPlain("kubeconfig", helper.TalEnv["VIP_IP"], []string{"-f"})
-		gencmd.ExecCmd(kubeconfigcmds[0])
+		if err := gencmd.ExecCmd(kubeconfigcmds[0]); err != nil {
+			return err
+		}
 
+		return nil
 	},
 }
 

@@ -24,25 +24,30 @@ import (
 )
 
 func InitFiles() error {
-	removeRunAgainFile()
-	ageGen()
-	genRootFiles()
-	genBaseFiles()
-	UpdateRootFiles()
-	UpdateBaseFiles()
+	for _, step := range []func() error{removeRunAgainFile, ageGen, genRootFiles, genBaseFiles, UpdateRootFiles, UpdateBaseFiles} {
+		if err := step(); err != nil {
+			return err
+		}
+	}
 	if err := talosconfig.EnsureSecrets(); err != nil {
 		return err
 	}
-	genKubernetes()
-	GenTalEnvConfigMap()
+	if err := genKubernetes(); err != nil {
+		return err
+	}
+	if err := GenTalEnvConfigMap(); err != nil {
+		return err
+	}
 	UpdateGitRepo()
 	fluxhandler.CreateGitSecret(helper.TalEnv["GITHUB_REPOSITORY"])
-	GenSopsSecret()
-	if err := fluxhandler.ProcessDirectory(path.Join(helper.ClusterPath, "kubernetes")); err != nil {
-		log.Error().Msgf("Error: %v", err)
+	if err := GenSopsSecret(); err != nil {
+		return err
 	}
 	if err := fluxhandler.ProcessDirectory(path.Join(helper.ClusterPath, "kubernetes")); err != nil {
-		log.Error().Msgf("Error: %v", err)
+		return err
+	}
+	if err := fluxhandler.ProcessDirectory(path.Join(helper.ClusterPath, "kubernetes")); err != nil {
+		return err
 	} else {
 		log.Info().Msg("Kustomizations processed successfully.")
 	}
@@ -162,7 +167,7 @@ func genBaseFiles() error {
 
 	err := fthelper.CopyDir(helper.BaseCache, helper.ClusterPath+"", false)
 	if err != nil {
-		log.Error().Msgf("Error: %v", err)
+		return err
 	} else {
 		log.Info().Msg("Base files copied successfully.")
 	}
@@ -263,7 +268,7 @@ func UpdateRootFiles() error {
 
 	// Process each file in the target directory
 	for _, filename := range sourceFiles {
-		sourceFilePath := filepath.Join(helper.BaseCache, filename)
+		sourceFilePath := filepath.Join(helper.RootCache, filename)
 		targetFilePath := filepath.Join("./", fthelper.ReplaceDotInFilename(filename))
 		fthelper.ReplaceContentBetweenLines(targetFilePath, sourceFilePath, "## Do not edit between this and DO NOT REMOVE", "## DO NOT REMOVE: Personal setting go under this line")
 	}
