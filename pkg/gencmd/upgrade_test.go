@@ -43,7 +43,7 @@ func TestUpgradeKeepsConfiguredSchematic(t *testing.T) {
 	previous := helper.TalosGenerated
 	helper.TalosGenerated = t.TempDir()
 	t.Cleanup(func() { helper.TalosGenerated = previous })
-	image := "factory.talos.dev/metal-installer/82866c01b2842b490c27a6f1a4996aae05f096c83db40ecda166b03da9deae46:v1.14.0"
+	image := "factory.talos.dev/metal-installer/4c4acaf75b4a51d6ec95b38dc8b49fb0af5f699e7fbd12fbf246821c649b5312:v1.14.0"
 	if err := os.WriteFile(filepath.Join(helper.TalosGenerated, "controlplane.yaml"), []byte("apiVersion: v1alpha1\nkind: UnattendedInstallConfig\ninstaller:\n  image: "+image+"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}

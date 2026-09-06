@@ -45,7 +45,7 @@ publication must be inspected and recovered before retrying.
 * `siderolabs/qemu-guest-agent`
 
 Its registered schematic ID is
-`82866c01b2842b490c27a6f1a4996aae05f096c83db40ecda166b03da9deae46`.
+`4c4acaf75b4a51d6ec95b38dc8b49fb0af5f699e7fbd12fbf246821c649b5312`.
 The installer image in `all/00-install.yaml` is
 `factory.talos.dev/metal-installer/<schematic-id>:v1.14.0`.
 An empty schematic would lose the existing extensions and interface naming.

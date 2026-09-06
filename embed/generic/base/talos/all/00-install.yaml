@@ -1,7 +1,7 @@
 apiVersion: v1alpha1
 kind: UnattendedInstallConfig
 installer:
-  image: factory.talos.dev/metal-installer/82866c01b2842b490c27a6f1a4996aae05f096c83db40ecda166b03da9deae46:v1.14.0
+  image: factory.talos.dev/metal-installer/4c4acaf75b4a51d6ec95b38dc8b49fb0af5f699e7fbd12fbf246821c649b5312:v1.14.0
 provisioning:
   diskSelector:
     match: disk.size <= 1600000000000u
