@@ -3,6 +3,7 @@ package initfiles
 import (
 	"bufio"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"regexp"
@@ -18,11 +19,15 @@ func LoadTalEnv(noFail bool) error {
 	// Check if clusterenv.yaml file exists
 	if _, err := os.Stat(helper.ClusterPath + "/clusterenv.yaml"); err == nil {
 		// Load environment variables from clusterenv.yaml
-		err := fthelper.LoadEnvFromFile(helper.ClusterPath+"/clusterenv.yaml", helper.TalEnv)
+		// Reload only source values. Previously derived IP variables must not
+		// become inputs on the next load during apply/bootstrap.
+		sourceEnv := make(map[string]string)
+		err := fthelper.LoadEnvFromFile(helper.ClusterPath+"/clusterenv.yaml", sourceEnv)
 		if err != nil {
 			log.Info().Msgf("Error loading environment from clusterenv.yaml: %v\n", err)
 			os.Exit(1)
 		}
+		helper.TalEnv = sourceEnv
 	} else if os.IsNotExist(err) {
 		// If the file doesn't exist, check noFail to determine next steps
 		if noFail {
@@ -113,7 +118,9 @@ func clusterEnvtoEnv() {
 }
 func PostProcessTalEnv() {
 	// Split IP/NETMASK and normalize IPs
-	for key, value := range helper.TalEnv {
+	// Iterating a snapshot prevents newly inserted entries from being visited
+	// and recursively expanded during the same map iteration.
+	for key, value := range maps.Clone(helper.TalEnv) {
 		ip, netmask, err := splitIPandNetmask(value)
 		if err == nil {
 			// Update TalEnv with IP and NETMASK entries
