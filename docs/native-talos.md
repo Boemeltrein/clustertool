@@ -125,6 +125,19 @@ comparison and the applicable Talos upgrade prerequisites are satisfied.
 
 ## Verification and references
 
+### Download a Linux test build before merging
+
+Open the **clustertool-linux-amd64-test-build** run in GitHub Actions and download
+the `.tar.gz` file from its summary or Artifacts section. The archive contains
+`clustertool`, `LICENSE` and `BUILD.txt`; the binary embeds the Linux amd64 Talos
+CLI and pre-commit helper. The filename and build information identify the exact
+PR commit. No tag or GitHub release is created, and artifacts expire after 14 days.
+
+The workflow runs automatically on PR updates, including draft PRs. Use **Re-run
+all jobs** on an existing run to build it again. The separate **Run workflow**
+button becomes available once the workflow exists on the default branch; it then
+lets you select the branch to build. No merge is needed to download a PR build.
+
 Run `go test ./...`. With `talosctl` 1.14 on PATH, run
 `TALOSCTL_INTEGRATION=1 go test ./...` for real generation, patching and validation
 tests, including failure preservation and Docker Hub credentials. Building the

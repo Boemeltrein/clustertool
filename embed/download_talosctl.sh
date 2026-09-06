@@ -28,6 +28,11 @@ for combo in "${combinations[@]}"; do
     os=$(echo "$combo" | cut -d ' ' -f 1)
     arch=$(echo "$combo" | cut -d ' ' -f 2)
 
+    # Test builds can download only the asset they embed.
+    if [ -n "${TALOSCTL_TARGET:-}" ] && [ "${os}_${arch}" != "$TALOSCTL_TARGET" ]; then
+        continue
+    fi
+
     # Determine the file name and download URL based on OS and architecture
     if [ "$os" == "windows" ]; then
         file_name="talosctl-${os}-${arch}.exe"
