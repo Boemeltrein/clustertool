@@ -7,7 +7,6 @@ spec:
   talos:
     # renovate: datasource=github-releases depName=siderolabs/talos
     version: v1.14.0
-    prePull: true
 
   policy:
     debug: false
