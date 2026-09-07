@@ -37,7 +37,8 @@ publication must be inspected and recovered before retrying.
 
 ## Image Factory schematic
 
-`talos/schematic.yaml` contains the Image Factory input, not a machine-config patch:
+The comments above `installer.image` in `talos/all/00-install.yaml` document the
+Image Factory customization included in the image:
 
 * `net.ifnames=0`
 * `siderolabs/util-linux-tools`
@@ -50,12 +51,14 @@ The installer image in `all/00-install.yaml` is
 `factory.talos.dev/metal-installer/<schematic-id>:v1.14.0`.
 An empty schematic would lose the existing extensions and interface naming.
 
-If you change the schematic, register the changed YAML with Image Factory and put
-the returned ID in the installer image. Editing `schematic.yaml` alone has no
-effect. For example, from the repository root:
+To change the schematic, copy the commented `customization` block into a temporary
+YAML file, remove the comment markers, and edit the desired settings. Register
+that YAML with Image Factory and put the returned ID in the installer image.
+Update the comments to match. Editing the comments alone has no effect.
+For example, after saving the input as `/tmp/talos-schematic.yaml`:
 
 ```sh
-curl --fail --request POST --data-binary @clusters/main/talos/schematic.yaml https://factory.talos.dev/schematics
+curl --fail --request POST --data-binary @/tmp/talos-schematic.yaml https://factory.talos.dev/schematics
 ```
 
 Use boot assets for the same schematic when installing. `clustertool talos upgrade`
