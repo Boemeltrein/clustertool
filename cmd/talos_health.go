@@ -1,12 +1,12 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/trueforge-org/clustertool/pkg/gencmd"
-	"github.com/trueforge-org/clustertool/pkg/helper"
 	"github.com/trueforge-org/clustertool/pkg/initfiles"
 	"github.com/trueforge-org/clustertool/pkg/sops"
 )
@@ -26,9 +26,14 @@ var health = &cobra.Command{
 		}
 		initfiles.LoadTalEnv(false)
 		log.Info().Msg("Running Cluster HealthCheck")
-		healthcmd := gencmd.GenPlain("health", helper.TalEnv["VIP_IP"], []string{})
-		if err := gencmd.ExecCmd(healthcmd[0]); err != nil {
-			return err
+		healthcmd := gencmd.GenPlain("health", "", []string{})
+		if len(healthcmd) == 0 {
+			return fmt.Errorf("no nodes configured for health check")
+		}
+		for _, command := range healthcmd {
+			if err := gencmd.ExecCmd(command); err != nil {
+				return err
+			}
 		}
 		return nil
 	},
@@ -37,3 +42,4 @@ var health = &cobra.Command{
 func init() {
 	talosCmd.AddCommand(health)
 }
+

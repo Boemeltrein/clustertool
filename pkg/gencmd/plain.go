@@ -5,7 +5,6 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/trueforge-org/clustertool/embed"
-	"github.com/trueforge-org/clustertool/pkg/helper"
 	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 )
 
@@ -18,12 +17,13 @@ func GenPlain(command string, node string, extraArgs []string) []string {
 	if node == "" {
 		log.Debug().Msg("Cmd Nodes is empty, rendering cmds for all nodes...")
 
-		node = helper.TalEnv["MASTER1IP_IP"]
-		cmd := talosPath + " " + command + " --talosconfig " + talosconfig.TalosconfigPath() + " -n " + node
-		if len(extraArgs) > 0 {
-			cmd += " " + strings.Join(extraArgs, " ")
+		inv, err := talosconfig.LoadInventory()
+		if err != nil {
+			return nil
 		}
-		commands = append(commands, cmd)
+		for _, n := range inv.Nodes {
+			commands = append(commands, GenPlain(command, n.Address, extraArgs)...)
+		}
 	} else {
 		log.Debug().Msgf("Rendering for single node: %s", node)
 		cmd := talosPath + " " + command + " --talosconfig " + talosconfig.TalosconfigPath() + " -n " + node
@@ -39,3 +39,4 @@ func GenPlain(command string, node string, extraArgs []string) []string {
 	log.Debug().Msgf("%s Commands rendered: %s", command, commands)
 	return commands
 }
+

@@ -14,13 +14,12 @@ import (
 )
 
 func ValidateNode(node string) error {
-	if helper.TalEnv["MASTER1IP_IP"] == "" {
-		return fmt.Errorf("MASTER1IP is required")
+	inv, err := LoadInventory()
+	if err != nil {
+		return err
 	}
-	if node != "" && node != "all" && node != helper.TalEnv["MASTER1IP_IP"] {
-		return fmt.Errorf("only the configured single control-plane node %s is supported, got %s", helper.TalEnv["MASTER1IP_IP"], node)
-	}
-	return nil
+	_, err = inv.Select(node)
+	return err
 }
 
 func checkLegacyPKI() error {
@@ -122,7 +121,11 @@ func render(data []byte, env map[string]string) ([]byte, error) {
 // Read only the official fields needed for CLI orchestration from validated
 // output. This does not define or validate another Talos schema.
 func GeneratedValue(kind string, fields ...string) (string, error) {
-	data, err := os.ReadFile(ControlPlanePath())
+	return GeneratedNodeValue(ControlPlanePath(), kind, fields...)
+}
+
+func GeneratedNodeValue(path, kind string, fields ...string) (string, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
@@ -155,3 +158,4 @@ func GeneratedValue(kind string, fields ...string) (string, error) {
 	}
 	return "", fmt.Errorf("generated Talos configuration has no %s %s", kind, strings.Join(fields, "."))
 }
+

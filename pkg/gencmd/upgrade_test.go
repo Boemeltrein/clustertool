@@ -10,6 +10,7 @@ import (
 )
 
 func TestGenKubeUpgrade(t *testing.T) {
+	withSingleNodeFixture(t)
 	previous := helper.TalosGenerated
 	helper.TalosGenerated = t.TempDir()
 	t.Cleanup(func() { helper.TalosGenerated = previous })
@@ -61,3 +62,4 @@ func TestUpgradeKeepsConfiguredSchematic(t *testing.T) {
 		t.Fatal("accepted an installer override")
 	}
 }
+

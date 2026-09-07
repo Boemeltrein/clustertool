@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/trueforge-org/clustertool/embed"
-	"github.com/trueforge-org/clustertool/pkg/helper"
 	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 )
 
@@ -13,28 +12,41 @@ func GenUpgrade(node string, extraFlags []string) ([]string, error) {
 	if err := talosconfig.ValidateNode(node); err != nil {
 		return nil, err
 	}
-	image, err := talosconfig.GeneratedValue("UnattendedInstallConfig", "installer", "image")
+	inv, err := talosconfig.LoadInventory()
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := inv.Select(node)
 	if err != nil {
 		return nil, err
 	}
 	if err := ValidateExtraArgs(extraFlags); err != nil {
 		return nil, err
 	}
-	if node == "" {
-		node = helper.TalEnv["MASTER1IP_IP"]
+	var commands []string
+	for _, n := range nodes {
+		image, err := talosconfig.GeneratedNodeValue(talosconfig.NodeConfigPath(n), "UnattendedInstallConfig", "installer", "image")
+		if err != nil {
+			return nil, fmt.Errorf("node %s: %w", n.Name, err)
+		}
+		command := embed.GetTalosExec() + " upgrade --talosconfig " + talosconfig.TalosconfigPath() + " -n " + n.Address + " --preserve --wait --image " + image
+		for _, flag := range extraFlags {
+			command += " " + flag
+		}
+		commands = append(commands, command)
 	}
-	command := embed.GetTalosExec() + " upgrade --talosconfig " + talosconfig.TalosconfigPath() +
-		" -n " + node + " --preserve --wait --image " + image
-	for _, flag := range extraFlags {
-		command += " " + flag
-	}
-	return []string{command}, nil
+	return commands, nil
 }
 
 func GenKubeUpgrade(node string) (string, error) {
-	image, err := talosconfig.GeneratedValue("", "machine", "kubelet", "image")
+	inv, err := talosconfig.LoadInventory()
 	if err != nil {
-		image, err = talosconfig.GeneratedValue("KubeletConfig", "image")
+		return "", err
+	}
+	path := talosconfig.NodeConfigPath(inv.Bootstrap())
+	image, err := talosconfig.GeneratedNodeValue(path, "", "machine", "kubelet", "image")
+	if err != nil {
+		image, err = talosconfig.GeneratedNodeValue(path, "KubeletConfig", "image")
 	}
 	if err != nil {
 		return "", err
@@ -48,3 +60,4 @@ func GenKubeUpgrade(node string) (string, error) {
 	strout := talosPath + " upgrade-k8s --talosconfig " + talosconfig.TalosconfigPath() + " -n " + node + " --to " + strings.TrimPrefix(tag, "v")
 	return strout, nil
 }
+

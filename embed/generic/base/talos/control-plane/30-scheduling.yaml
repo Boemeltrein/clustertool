@@ -1,0 +1,7 @@
+# Preserve scheduling on control-plane nodes without applying this to workers.
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+taints:
+  node-role.kubernetes.io/control-plane:
+    $patch: delete
+

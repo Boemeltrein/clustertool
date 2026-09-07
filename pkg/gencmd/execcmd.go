@@ -36,7 +36,7 @@ func ExecCmds(taloscmds []string, healthcheck bool) error {
 		return err
 	}
 	if len(taloscmds) == 0 {
-		return nil
+		return fmt.Errorf("no node commands generated")
 	}
 	var todocmds []string
 	var healthcmd string
@@ -132,3 +132,4 @@ func ExecCmds(taloscmds []string, healthcheck bool) error {
 	}
 	return nil
 }
+

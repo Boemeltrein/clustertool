@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/trueforge-org/clustertool/embed"
@@ -77,6 +76,13 @@ func EnsureSecrets() error {
 // Generate builds a native Talos control-plane configuration using the stable
 // secrets bundle and the documents in all/ and control-plane/.
 func Generate() error {
+	inv, err := LoadInventory()
+	if err != nil {
+		return err
+	}
+	if !inv.Legacy {
+		return generateInventory(inv)
+	}
 	if err := ValidateNode(""); err != nil {
 		return err
 	}
@@ -156,12 +162,20 @@ func Generate() error {
 }
 
 func renderPatches(workDir string) ([]string, error) {
+	return renderPatchDirs(workDir, []string{"all", "control-plane"}, true)
+}
+
+func renderPatchDirs(workDir string, dirs []string, requireNonempty bool) ([]string, error) {
 	var sourceFiles []string
-	for _, dir := range []string{
-		filepath.Join(helper.TalosPath, "all"),
-		filepath.Join(helper.TalosPath, "control-plane"),
-	} {
+	for _, relative := range dirs {
+		dir := filepath.Join(helper.TalosPath, relative)
 		entries, err := os.ReadDir(dir)
+		if os.IsNotExist(err) && !requireNonempty && (relative == "worker" || relative == "control-plane") {
+			continue
+		}
+		if os.IsNotExist(err) && !requireNonempty && strings.HasPrefix(relative, "nodes") {
+			return nil, fmt.Errorf("node patch directory %s is required", dir)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("read Talos document directory %s: %w", dir, err)
 		}
@@ -172,12 +186,11 @@ func renderPatches(workDir string) ([]string, error) {
 				count++
 			}
 		}
-		if count == 0 {
+		if count == 0 && requireNonempty {
 			return nil, fmt.Errorf("no Talos documents in %s", dir)
 		}
 	}
 
-	sort.Strings(sourceFiles)
 	user, pass := helper.TalEnv["DOCKERHUB_USER"], helper.TalEnv["DOCKERHUB_PASSWORD"]
 	if (user == "") != (pass == "") {
 		return nil, fmt.Errorf("set both DOCKERHUB_USER and DOCKERHUB_PASSWORD or neither")
@@ -215,3 +228,4 @@ func runTalosctl(args ...string) error {
 	}
 	return nil
 }
+

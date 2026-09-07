@@ -67,6 +67,40 @@ explicitly to `talosctl upgrade --image`; it therefore retains the extensions.
 Kubernetes upgrade reads the kubelet version from that configuration too.
 Use supported Talos/Kubernetes upgrade sequences when migrating an existing cluster.
 
+## Multi-node inventory
+
+For a multi-node cluster, add `talos/inventory.yaml` and a patch directory for
+each node. The inventory is command-targeting metadata; all Talos settings
+remain official YAML patches:
+
+```yaml
+version: 1
+bootstrapNode: control-1
+nodes:
+  - name: control-1
+    role: control-plane
+    address: 192.0.2.11
+  - name: control-2
+    role: control-plane
+    address: 192.0.2.12
+  - name: worker-1
+    role: worker
+    address: 192.0.2.21
+```
+
+Use `talos/nodes/<name>/` for hostname, network, installer image and disk
+patches. Shared patches stay in `talos/all/`; control-plane patches go in
+`talos/control-plane/`, and worker-only patches go in `talos/worker/`. Run
+`clustertool talos genconfig` to generate and validate one configuration per
+node. `talos apply <name-or-ip>` targets one node; `talos apply` or `all` targets
+the inventory in control-plane-first order. Bootstrap runs once for the
+configured `bootstrapNode`; joining nodes never bootstrap a second cluster.
+
+Each node may use a different Image Factory schematic in its own
+`UnattendedInstallConfig.installer.image`. Tuppr does not read these source
+files: it discovers the schematic from each running node when it performs an
+upgrade.
+
 ## Preserved settings
 
 Values from the previous main-branch template are represented in these loose files.
@@ -167,3 +201,4 @@ release requires downloading the embedded assets with `bash embed/download_talos
 * [Official legacy configuration](https://docs.siderolabs.com/talos/v1.14/reference/configuration/v1alpha1/config)
 * [Boot assets and Image Factory](https://docs.siderolabs.com/talos/v1.14/platform-specific-installations/boot-assets)
 * [Image Factory API](https://github.com/siderolabs/image-factory/blob/main/docs/api.md)
+

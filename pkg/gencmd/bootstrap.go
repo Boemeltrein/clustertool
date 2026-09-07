@@ -14,6 +14,7 @@ import (
 	"github.com/trueforge-org/clustertool/pkg/kubectlcmds"
 	"github.com/trueforge-org/clustertool/pkg/nodestatus"
 	"github.com/trueforge-org/clustertool/pkg/sops"
+	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 )
 
 var HelmRepos map[string]*fluxhandler.HelmRepo
@@ -58,6 +59,25 @@ func RunBootstrap(args []string) error {
 	log.Info().Msgf("Bootstrap: waiting for VIP %v to come online...", helper.TalEnv["VIP_IP"])
 	if _, err := nodestatus.WaitForHealth(helper.TalEnv["VIP_IP"], []string{"running"}); err != nil {
 		return err
+	}
+
+	// Bootstrap is performed once. All remaining inventory nodes join the
+	// established cluster with their own generated configuration afterwards.
+	if inv, err := talosconfig.LoadInventory(); err != nil {
+		return err
+	} else {
+		for _, node := range inv.Nodes {
+			if node.Address == bootstrapNode {
+				continue
+			}
+			log.Info().Msgf("Bootstrap: applying configuration to joining node %s (%s)", node.Name, node.Address)
+			if err := ExecCmds(GenApply(node.Address, extraArgs), false); err != nil {
+				return fmt.Errorf("apply joining node %s: %w", node.Name, err)
+			}
+			if _, err := nodestatus.WaitForHealth(node.Address, []string{"running"}); err != nil {
+				return fmt.Errorf("wait for joining node %s: %w", node.Name, err)
+			}
+		}
 	}
 
 	log.Info().Msgf("Bootstrap: Configuring kubeconfig/kubectl for VIP: %v", helper.TalEnv["VIP_IP"])
@@ -236,3 +256,4 @@ func RunBootstrap(args []string) error {
 	log.Info().Msg("Bootstrap: Completed Successfully!")
 	return nil
 }
+
