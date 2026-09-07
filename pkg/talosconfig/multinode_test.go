@@ -23,14 +23,12 @@ func multiFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	install, err := os.ReadFile(filepath.Join(helper.TalosPath, "all", "00-install.yaml"))
+	install, err := os.ReadFile(filepath.Join(helper.TalosPath, "nodes", "control-1", "00-install.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, file := range []string{"00-install.yaml", "01-hostname.yaml", "20-network.yaml"} {
-		if err := os.Remove(filepath.Join(helper.TalosPath, "all", file)); err != nil {
-			t.Fatal(err)
-		}
+		_ = os.Remove(filepath.Join(helper.TalosPath, "all", file))
 	}
 	write("inventory.yaml", "version: 1\nbootstrapNode: control-1\nnodes:\n  - {name: control-1, role: control-plane, address: 192.0.2.11}\n  - {name: control-2, role: control-plane, address: 192.0.2.12}\n  - {name: worker-1, role: worker, address: 192.0.2.21}\n")
 	for index, name := range []string{"control-1", "control-2", "worker-1"} {
@@ -134,4 +132,3 @@ func TestMultiNodeGenerationIntegration(t *testing.T) {
 		t.Fatal("cluster identity changed")
 	}
 }
-

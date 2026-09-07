@@ -1,15 +1,18 @@
 # Native Talos 1.14
 
 Clustertool uses `talosctl` directly. Talhelper and its configuration schema are
-removed. This workflow manages the existing single control-plane node defined by
-`MASTER1IP`; it does not generate worker or additional control-plane configurations.
+removed. The embedded scaffold is inventory-first: `init` copies
+`talos/inventory.yaml`, the role directories and a `nodes/control-1/` patch set.
+The starter inventory uses `MASTER1IP` for its first control-plane address and
+can be extended with additional nodes.
 
 ## Init, genconfig and apply
 
 1. Run `clustertool init` in your cluster repository. On a new repository it creates
    the scaffold and stops so you can complete `clusters/main/clusterenv.yaml`.
-2. Fill in the environment and review the YAML files under
-   `clusters/main/talos/all/` and `clusters/main/talos/control-plane/`. Run
+2. Fill in the environment and review `clusters/main/talos/inventory.yaml` and
+   the YAML files under `clusters/main/talos/all/`,
+   `clusters/main/talos/control-plane/` and `clusters/main/talos/nodes/`. Run
    `clustertool init` again. It creates `talos/secrets.sops.yaml` once, using
    `talosctl gen secrets`. Repeating init preserves that identity.
 3. Run `clustertool genconfig`. It renders the environment into YAML scalar values,
@@ -22,8 +25,10 @@ removed. This workflow manages the existing single control-plane node defined by
    existing bootstrap prompt starts installation, etcd bootstrap and the existing
    Kubernetes/Helm/Flux setup. For an installed node it applies the configuration.
 
-Both document directories are required. Files are loaded in filename order from
-`all/`, then `control-plane/`. Optional documents are not generally loaded.
+For inventory generation, files are loaded in filename order from `all/`, the
+node's role directory and that node's `nodes/<name>/` directory. The legacy
+single-node fallback loads `all/` and `control-plane/` when no inventory exists.
+Optional documents are not generally loaded.
 When both Docker Hub environment variables are set, `optional/44-registry-auth.yaml`
 is included automatically. To enable NVIDIA, move its optional document into
 `all/` and create an appropriate Image Factory schematic with the required NVIDIA
@@ -37,7 +42,7 @@ publication must be inspected and recovered before retrying.
 
 ## Image Factory schematic
 
-The comments above `installer.image` in `talos/all/00-install.yaml` document the
+The comments above `installer.image` in `talos/nodes/control-1/00-install.yaml` document the
 Image Factory customization included in the image:
 
 * `net.ifnames=0`
@@ -47,7 +52,7 @@ Image Factory customization included in the image:
 
 Its registered schematic ID is
 `4c4acaf75b4a51d6ec95b38dc8b49fb0af5f699e7fbd12fbf246821c649b5312`.
-The installer image in `all/00-install.yaml` is
+The installer image in `nodes/control-1/00-install.yaml` is
 `factory.talos.dev/metal-installer/<schematic-id>:v1.14.0`.
 An empty schematic would lose the existing extensions and interface naming.
 
@@ -69,9 +74,9 @@ Use supported Talos/Kubernetes upgrade sequences when migrating an existing clus
 
 ## Multi-node inventory
 
-For a multi-node cluster, add `talos/inventory.yaml` and a patch directory for
-each node. The inventory is command-targeting metadata; all Talos settings
-remain official YAML patches:
+For a multi-node cluster, extend the copied `talos/inventory.yaml` and add a
+patch directory for each node. The inventory is command-targeting metadata; all
+Talos settings remain official YAML patches:
 
 ```yaml
 version: 1
@@ -109,11 +114,11 @@ migration; init does not translate arbitrary customizations.
 
 | Previous configuration | New file under `talos/` |
 | --- | --- |
-| Install disk at most 1600 GB; no disk wipe | `all/00-install.yaml` (`disk.size <= 1600u * GB`, excluding loop devices, read-only devices and CD-ROMs) |
-| Hostname `k8s-control-1` | `all/01-hostname.yaml` |
+| Install disk at most 1600 GB; no disk wipe | `nodes/control-1/00-install.yaml` (`disk.size <= 1600u * GB`, excluding loop devices, read-only devices and CD-ROMs) |
+| Hostname `k8s-control-1` | `nodes/control-1/01-hostname.yaml` |
 | Machine certificate SANs `127.0.0.1` and VIP | `all/02-machine.yaml` |
 | Cluster pod/service networks | `all/10-cluster.yaml` |
-| `eth0`, static address, default gateway, VIP | `all/20-network.yaml` |
+| `eth0`, static address, default gateway, VIP | `nodes/control-1/20-network.yaml` |
 | DNS `1.1.1.1`, `8.8.8.8`; all three hostDNS flags | `all/21-resolver.yaml` |
 | Server certificate rotation, maxPods 250, shutdown 15s/10s, GC 50/30/30m | `all/30-kubelet.yaml` |
 | OpenEBS and Longhorn bind mounts with `bind,rshared,rw`; control-plane scheduling | `all/30-kubelet.yaml` |
@@ -201,4 +206,3 @@ release requires downloading the embedded assets with `bash embed/download_talos
 * [Official legacy configuration](https://docs.siderolabs.com/talos/v1.14/reference/configuration/v1alpha1/config)
 * [Boot assets and Image Factory](https://docs.siderolabs.com/talos/v1.14/platform-specific-installations/boot-assets)
 * [Image Factory API](https://github.com/siderolabs/image-factory/blob/main/docs/api.md)
-

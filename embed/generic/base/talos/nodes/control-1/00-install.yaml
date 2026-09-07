@@ -20,4 +20,3 @@ provisioning:
     # disk's serial or dev_path when more than one writable disk matches.
     match: disk.size <= 1600u * GB && disk.transport != "" && !disk.readonly && !disk.cdrom && !disk.dev_path.startsWith("/dev/loop")
   wipe: false
-

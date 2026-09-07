@@ -41,6 +41,16 @@ func LoadInventory() (*Inventory, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The embedded inventory is a template so init can copy one consistent
+	// layout while the actual management addresses remain in clusterenv.yaml.
+	// Render only when a template variable is present; hand-written inventories
+	// remain ordinary YAML files.
+	if strings.Contains(string(data), "${") {
+		data, err = render(data, helper.TalEnv)
+		if err != nil {
+			return nil, fmt.Errorf("render inventory: %w", err)
+		}
+	}
 	var inv Inventory
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
 	dec.KnownFields(true)
@@ -117,4 +127,3 @@ func (i *Inventory) Endpoints() []string {
 }
 
 func NodeConfigPath(n Node) string { return filepath.Join(helper.TalosGenerated, n.Name+".yaml") }
-

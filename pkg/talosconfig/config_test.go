@@ -48,6 +48,23 @@ func fixture(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// The embedded scaffold is inventory-first. Keep this fixture focused on
+	// the legacy fallback tests by removing the copied inventory template.
+	if err := os.Remove(filepath.Join(helper.TalosPath, "inventory.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	// Legacy generation still expects the node-specific documents in all/.
+	for _, name := range []string{"00-install.yaml", "01-hostname.yaml", "20-network.yaml"} {
+		source := filepath.Join(helper.TalosPath, "nodes", "control-1", name)
+		destination := filepath.Join(helper.TalosPath, "all", name)
+		data, err := os.ReadFile(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(destination, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestExistingSecretsAndLegacyGuard(t *testing.T) {
