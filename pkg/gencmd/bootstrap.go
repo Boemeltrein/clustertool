@@ -74,10 +74,8 @@ func RunBootstrap(args []string) error {
 		}
 		log.Info().Msgf("Bootstrap: waiting for installation/bootstrap availability on %s; inspect the disk selector and installation logs if it remains unavailable", bootstrapNode)
 		// Check again after installation: a prior interrupted RPC may have succeeded.
-		if _, err := ExistingControlPlane(inv); err != nil {
-			if err := ExecCmd(GenPlain("bootstrap", bootstrapNode, nil)[0]); err != nil {
-				return err
-			}
+		if err := bootstrapIfNeeded(inv); err != nil {
+			return err
 		}
 	}
 
@@ -89,8 +87,7 @@ func RunBootstrap(args []string) error {
 	log.Info().Msgf("Bootstrap: retrieving kubeconfig through control plane %v", bootstrapNode)
 	// Ensure kubeconfig is loaded
 
-	kubeconfigcmds := GenPlain("kubeconfig", bootstrapNode, []string{"-f"})
-	if err := ExecCmd(kubeconfigcmds[0]); err != nil {
+	if err := ExecCmd(bootstrapCommand(inv, "kubeconfig", "-f")); err != nil {
 		return err
 	}
 
