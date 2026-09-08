@@ -1,0 +1,23 @@
+# ClusterTool configuration.
+# Talos settings belong in the patches directory next to this file.
+apiVersion: clustertool/v1
+kind: ClusterConfig
+
+bootstrapNode: control-1
+
+nodes:
+  - name: control-1
+    role: control-plane
+    address: ${CONTROL1IP}
+
+  # Optional additional nodes:
+  # Configure their addresses in clusterenv.yaml and create matching
+  # patches/nodes/<name>/ directories before enabling them.
+  #
+  # - name: control-2
+  #   role: control-plane
+  #   address: ${CONTROL2IP}
+  #
+  # - name: worker-1
+  #   role: worker
+  #   address: ${WORKER1IP}

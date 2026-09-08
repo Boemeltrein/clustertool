@@ -12,7 +12,7 @@ import (
 )
 
 var upgradeLongHelp = strings.TrimSpace(`
-The "upgrade" command updates selected inventory nodes sequentially using each node's validated installer image and schematic ID. With no target, all nodes are selected.
+The "upgrade" command updates nodes selected in clustertool.yaml sequentially using each node's validated installer image and schematic ID. With no target, all nodes are selected.
 
 After upgrading Talos, it upgrades Kubernetes to the configured kubelet version.
 

@@ -24,19 +24,6 @@ import (
 )
 
 func InitFiles() error {
-	// Init copies templates; migration must not silently mix old node patches
-	// with a new inventory and regenerate a running cluster's identity.
-	if _, err := os.Stat(filepath.Join(helper.TalosPath, "inventory.yaml")); os.IsNotExist(err) {
-		for _, existing := range []string{"talconfig.yaml", "all", "generated", "secrets.sops.yaml"} {
-			if _, e := os.Stat(filepath.Join(helper.TalosPath, existing)); e == nil {
-				return fmt.Errorf("existing Talos layout without inventory.yaml: follow the explicit migration in docs/native-talos.md before init")
-			} else if !os.IsNotExist(e) {
-				return e
-			}
-		}
-	} else if err != nil {
-		return err
-	}
 	for _, step := range []func() error{removeRunAgainFile, ageGen, genRootFiles, genBaseFiles, UpdateRootFiles, UpdateBaseFiles} {
 		if err := step(); err != nil {
 			return err

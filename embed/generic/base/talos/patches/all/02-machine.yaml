@@ -2,4 +2,4 @@
 machine:
   certSANs:
     - 127.0.0.1
-    - ${VIP_IP}
+    - ${VIP}

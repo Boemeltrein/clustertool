@@ -10,7 +10,7 @@ kind: KubeAPIServerConfig
 image: registry.k8s.io/kube-apiserver:v1.37.0
 certExtraSANs:
   - 127.0.0.1
-  - ${VIP_IP}
+  - ${VIP}
 extraArgs:
   enable-aggregator-routing: "true"
 ---

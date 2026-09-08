@@ -19,7 +19,7 @@ func TestGeneratedFlagsMatchTalosCLI(t *testing.T) {
 	helper.TalosGenerated = t.TempDir()
 	t.Cleanup(func() { helper.TalosGenerated = previous })
 	data := []byte("machine:\n  kubelet:\n    image: ghcr.io/siderolabs/kubelet:v1.37.0\n---\napiVersion: v1alpha1\nkind: UnattendedInstallConfig\ninstaller:\n  image: factory.talos.dev/metal-installer/test:v1.14.0\n")
-	if err := os.WriteFile(filepath.Join(helper.TalosGenerated, "controlplane.yaml"), data, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(helper.TalosGenerated, "control-1.yaml"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	upgrades, err := GenUpgrade("", nil)

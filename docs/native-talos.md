@@ -1,130 +1,157 @@
-# Native Talos 1.14
+# Native Talos configuration
 
-Clustertool uses `talosctl` directly. Talhelper and its configuration schema are
-removed. The embedded scaffold is inventory-first: `init` copies
-`talos/inventory.yaml`, the role directories and a `nodes/control-1/` patch set.
-The starter inventory uses `MASTER1IP` for its first control-plane address and
-can be extended with additional nodes.
+This major version uses native Talos 1.14 documents. Talhelper, the previous
+configuration layout and automatic migration are not supported.
 
-## Init, genconfig and apply
+## Files and initialization
 
-1. Run `clustertool init` in your cluster repository. On a new repository it creates
-   the scaffold and stops so you can complete `clusters/main/clusterenv.yaml`.
-2. Fill in the environment and review `clusters/main/talos/inventory.yaml` and
-   the YAML files under `clusters/main/talos/all/`,
-   `clusters/main/talos/control-plane/` and `clusters/main/talos/nodes/`. Run
-   `clustertool init` again. It creates `talos/secrets.sops.yaml` once, using
-   `talosctl gen secrets`. Repeating init preserves that identity.
-3. Run `clustertool genconfig` (also available as `clustertool talos genconfig`). It renders the environment into YAML scalar values,
-   generates a base with `talosctl gen config --with-secrets`, applies the loose
-   documents with `talosctl machineconfig patch`, and runs `talosctl validate
-   --mode metal`. Only a fully validated set replaces `talos/generated/<inventory-name>.yaml`
-   and `talos/generated/talosconfig`. Client endpoints include every control-plane
-   management address; the default client node is the inventory bootstrap node.
-4. Review the generated configuration before running `clustertool talos apply`.
-   Apply regenerates and validates all nodes first, then uses the files in `generated/` directly.
-   Existing authenticated etcd membership selects the apply/join path, including
-   new workers in maintenance. Only when all control planes report maintenance
-   does the new-cluster confirmation appear. Unknown cluster state stops the command.
+`clustertool init` copies the embedded scaffold and creates `secrets.sops.yaml`
+only when no identity exists. Existing secrets are retained.
 
-For inventory generation, files are loaded in filename order from `all/`, the
-node's role directory and that node's `nodes/<name>/` directory. The legacy
-single-node fallback loads `all/` and `control-plane/` when no inventory exists.
-Optional documents are not generally loaded.
-When both Docker Hub environment variables are set, `optional/44-registry-auth.yaml`
-is included automatically. To enable NVIDIA, move its optional document into
-`all/` and create an appropriate Image Factory schematic with the required NVIDIA
-extensions; the default schematic does not include those drivers.
-
-`secrets.sops.yaml` is the persistent cluster identity; generated files are disposable.
-Run `clustertool encrypt` before committing. Decryption errors stop the workflow.
-The generated and staging directories are ignored by Git. Do not run concurrent
-generation processes. A remaining `generated.previous` after an interrupted
-publication must be inspected and recovered before retrying.
-
-## Image Factory schematic
-
-The comments above `installer.image` in `talos/nodes/control-1/00-install.yaml` document the
-Image Factory customization included in the image:
-
-* `net.ifnames=0`
-* `siderolabs/util-linux-tools`
-* `siderolabs/iscsi-tools`
-* `siderolabs/qemu-guest-agent`
-
-Its registered schematic ID is
-`4c4acaf75b4a51d6ec95b38dc8b49fb0af5f699e7fbd12fbf246821c649b5312`.
-The installer image in `nodes/control-1/00-install.yaml` is
-`factory.talos.dev/metal-installer/<schematic-id>:v1.14.0`.
-An empty schematic would lose the existing extensions and interface naming.
-
-To change the schematic, copy the commented `customization` block into a temporary
-YAML file, remove the comment markers, and edit the desired settings. Register
-that YAML with Image Factory and put the returned ID in the installer image.
-Update the comments to match. Editing the comments alone has no effect.
-For example, after saving the input as `/tmp/talos-schematic.yaml`:
-
-```sh
-curl --fail --request POST --data-binary @/tmp/talos-schematic.yaml https://factory.talos.dev/schematics
+```text
+clusters/main/talos/
+├── examples/
+│   ├── 44-registry-auth.yaml
+│   └── 50-nvidia.yaml
+├── patches/
+│   ├── all/
+│   ├── control-plane/
+│   ├── worker/
+│   └── nodes/
+│       └── control-1/
+├── generated/
+├── clustertool.yaml
+└── secrets.sops.yaml
 ```
 
-Use boot assets for the same schematic when installing. `clustertool talos upgrade`
-reads the installer image from the validated generated configuration and passes it
-explicitly to `talosctl upgrade --image`; it therefore retains the extensions.
-Kubernetes upgrade reads the kubelet version from that configuration too.
-Use supported Talos/Kubernetes upgrade sequences when migrating an existing cluster.
+Edit source documents in `patches/`, not `generated/`. Generation reads YAML files
+in filename order from `patches/all/`, then `patches/<role>/`, then
+`patches/nodes/<name>/`. Later patches can override earlier settings.
+The worker role directory may be empty. Each configured node requires its own
+node directory, hostname, installer image and static management address.
 
-## Multi-node inventory
+## ClusterTool configuration
 
-For a multi-node cluster, extend the copied `talos/inventory.yaml` and add a
-patch directory for each node. The inventory is command-targeting metadata; all
-Talos settings remain official YAML patches:
+`clustertool.yaml` is required, including for a single-node cluster. Its
+`apiVersion: clustertool/v1` describes the file format, not the binary or Talos
+version. `kind: ClusterConfig` identifies this as ClusterTool configuration;
+it is not a Kubernetes resource or a Talos document.
 
 ```yaml
-version: 1
+apiVersion: clustertool/v1
+kind: ClusterConfig
 bootstrapNode: control-1
 nodes:
   - name: control-1
     role: control-plane
-    address: 192.0.2.11
-  - name: control-2
-    role: control-plane
-    address: 192.0.2.12
-  - name: worker-1
-    role: worker
-    address: 192.0.2.21
+    address: ${CONTROL1IP}
+
+  # Optional: configure these addresses and create the node patch directories.
+  # - name: control-2
+  #   role: control-plane
+  #   address: ${CONTROL2IP}
+  # - name: worker-1
+  #   role: worker
+  #   address: ${WORKER1IP}
 ```
 
-Use `talos/nodes/<name>/` for hostname, network, installer image and disk
-patches. Shared patches stay in `talos/all/`; control-plane patches go in
-`talos/control-plane/`, and worker-only patches go in `talos/worker/`. Run
-`clustertool talos genconfig` to generate and validate one configuration per
-node. `talos apply <name-or-ip>` targets one node; `talos apply` or `all` targets
-the inventory in control-plane-first order. Bootstrap runs once for the
-configured `bootstrapNode`; joining nodes never bootstrap a second cluster.
+`bootstrapNode` selects the control plane used for initial bootstrap, not a
+permanent leader. `name` selects the patch directory and generated filename;
+the actual hostname is set in that node's `HostnameConfig`.
+Missing files, unsupported format/kind, unknown fields, duplicate names/IPs and
+invalid bootstrap selections stop generation. No environment-only fallback exists.
 
-Each node may use a different Image Factory schematic in its own
-`UnattendedInstallConfig.installer.image`. Tuppr does not read these source
-files: it discovers the schematic from each running node when it performs an
-upgrade.
+## Addresses and networking
 
-`version: 1` is the inventory format version, not a Talos or Kubernetes version.
-`bootstrapNode` identifies the control plane used to initialize a new cluster;
-it does not make that node a permanent leader. `name` selects the patch directory
-and output filename. The actual node hostname remains in `HostnameConfig`.
+In `clusterenv.yaml`, specify bare management addresses:
 
-When adding another control plane, copy the starter node directory and change
-its hostname, static address and disk/image settings. Its VIP link must match its
-own interface. When adding a worker, also remove `Layer2VIPConfig` from the copied
-network file. Generation rejects a worker VIP and a static address that does not
-match its inventory address. Literal management IPs are supported; additional
-`MASTER2IP` or `WORKER1IP` environment variables are not required.
+```yaml
+CONTROL1IP: 192.168.20.210
+VIP: 192.168.20.200
+GATEWAY: 192.168.20.1
+# CONTROL2IP: 192.168.20.220
+# WORKER1IP: 192.168.20.221
+```
 
-`KubeTalosAPIAccessConfig` and `KubeProxyConfig` belong in the control-plane layer:
-Talos 1.14 rejects them on workers. This corrects the earlier proposal's suggestion
-to copy the API-access document onto every node. The system-upgrade permissions
-remain configured through the control planes; Tuppr discovers each node's live
-schematic independently.
+Values are substituted as entered. ClusterTool does not synthesize `_IP`,
+`_CIDR` or `_NETMASK` variables or assume a subnet prefix. Specify each node's
+prefix in its network patch explicitly:
+
+```yaml
+apiVersion: v1alpha1
+kind: LinkConfig
+name: eth0
+up: true
+addresses:
+  - address: ${CONTROL1IP}/24
+routes:
+  - gateway: ${GATEWAY}
+```
+
+Choose the prefix and interface for your network. Do not include a prefix in
+`CONTROL1IP` when the patch appends one. `PODNET` and `SVCNET` remain explicit
+network CIDRs. Undefined variables fail rendering. Generation checks that the
+management address agrees with the rendered network patch.
+
+For another control plane, copy the starter node patches and change its hostname,
+address variable, interface, disk selector and image as appropriate. The
+`Layer2VIPConfig` uses `${VIP}` and must refer to that node's interface.
+For a worker, also remove the `Layer2VIPConfig`. Workers receive the shared and
+worker role layers, not the control-plane layer. `KubeTalosAPIAccessConfig` and
+`KubeProxyConfig` must remain control-plane-only.
+
+## Examples are inactive
+
+Nothing in `examples/` is loaded automatically. Copy a document to `patches/all/`
+to activate it on every node or to `patches/nodes/<name>/` for selected nodes.
+Do not copy the same example into both layers unless you intend an override.
+
+To enable Docker Hub authentication, copy `44-registry-auth.yaml` into an active
+patch directory and set its `DOCKERHUB_USER` and `DOCKERHUB_PASSWORD` variables.
+Setting those variables alone does not enable registry authentication. There is
+no special Docker Hub variable check; normal substitution and Talos validation
+apply to the active document. Protect credentials with the existing SOPS workflow.
+
+For NVIDIA, copy `50-nvidia.yaml` to the relevant node patch directories and use
+an image schematic containing the matching NVIDIA extensions.
+
+## Generate and apply
+
+```sh
+clustertool genconfig
+clustertool talos apply
+# Target one configured node:
+clustertool talos apply control-1
+```
+
+Apply regenerates and validates every node first, then executes the selected
+nodes using `generated/<name>.yaml` directly. Failed generation retains previous
+output and secrets. No `.execute` copies or generation locks are used; do not
+run generation and apply concurrently.
+
+## Image Factory schematic
+
+`patches/nodes/control-1/00-install.yaml` documents the default customization:
+`net.ifnames=0`, iscsi-tools, qemu-guest-agent and util-linux-tools. Each node can
+specify a different `UnattendedInstallConfig.installer.image`:
+
+```yaml
+installer:
+  image: factory.talos.dev/metal-installer/<schematic-id>:v1.14.0
+```
+
+Register the desired customization with Image Factory and replace the image's
+schematic ID. Keep the extensions and boot arguments the node still needs.
+Applying configuration does not replace the running OS image. Activate a changed
+schematic, including at the same Talos version, with:
+
+```sh
+clustertool talos upgrade control-3 --talos-only
+```
+
+This reboots the selected node. Check its running schematic with `talosctl get
+extensions`. Tuppr remains independent: it discovers each running node's schematic
+and does not read ClusterTool configuration files.
 
 ### Applying, resuming and upgrading
 
@@ -159,122 +186,36 @@ upgrade necessarily causes control-plane downtime. Talos upgrades use the CLI's
 ID and readiness before proceeding. Cluster health and default kubeconfig retrieval
 select a reachable authenticated control plane.
 
-### Migrating the earlier native single-node layout
 
-Back up the complete existing configuration and credentials securely. Keep
-`secrets.sops.yaml` unchanged. Add an inventory entry with the existing management
-address and create its `nodes/<name>/` directory. Move the existing install,
-hostname and network patches from `all/` into that directory, preserving every
-value. Retain shared settings in `all/` and control-plane settings in the role
-directory. Run genconfig and compare the old and new complete outputs, particularly
-CAs, hostname, IPs, image, disk, mounts, labels and taints, before applying.
-
-`init` refuses an existing Talos layout without an inventory instead of silently
-mixing new templates with the earlier layout. An existing Talhelper `talconfig.yaml`
-must also be migrated explicitly as described below. No arbitrary custom patches
-are translated automatically, and no secrets are regenerated to bypass migration.
-
-See [multinode verification](multinode-validation.md) for offline evidence and the
-remaining live-cluster acceptance procedure.
-
-## Preserved settings
-
-Values from the previous main-branch template are represented in these loose files.
-Site-specific changes to an existing `talconfig.yaml` or patch still require manual
-migration; init does not translate arbitrary customizations.
+## Settings represented in the native documents
 
 | Previous configuration | New file under `talos/` |
 | --- | --- |
-| Install disk at most 1600 GB; no disk wipe | `nodes/control-1/00-install.yaml` (`disk.size <= 1600u * GB`, excluding loop devices, read-only devices and CD-ROMs) |
-| Hostname `k8s-control-1` | `nodes/control-1/01-hostname.yaml` |
-| Machine certificate SANs `127.0.0.1` and VIP | `all/02-machine.yaml` |
-| Cluster pod/service networks | `all/10-cluster.yaml` |
-| `eth0`, static address, default gateway, VIP | `nodes/control-1/20-network.yaml` |
-| DNS `1.1.1.1`, `8.8.8.8`; all three hostDNS flags | `all/21-resolver.yaml` |
-| Server certificate rotation, maxPods 250, shutdown 15s/10s, GC 50/30/30m | `all/30-kubelet.yaml` |
-| OpenEBS and Longhorn bind mounts with `bind,rshared,rw` | `all/30-kubelet.yaml` |
-| Control-plane scheduling | `control-plane/30-scheduling.yaml` |
-| All 14 sysctls, Cloudflare NTP and 13 registry mirrors with original endpoint order | `all/40-system.yaml` |
-| `nvme_tcp`, `vfio_pci`, `uio_pci_generic` | `all/41-kernel.yaml` |
-| Containerd `discard_unpacked_layers = false` | `all/42-cri.yaml` |
-| `/etc/nfsmount.conf`, mode 0644, NFS 4.2/hard/nconnect 16/noatime | `all/43-nfs.yaml` |
-| Kubernetes 1.37, API access for system-upgrade, aggregator routing, controller/scheduler bind addresses, scheduler policy, disabled proxy and metrics address, PodSecurity exemptions, no Flannel | `control-plane/10-kubernetes.yaml` |
-| etcd metrics at `http://0.0.0.0:2381` | `control-plane/20-etcd.yaml` |
-| Docker Hub authentication, when configured | `optional/44-registry-auth.yaml` |
-| Optional NVIDIA modules and BPF hardening | `optional/50-nvidia.yaml` |
+| Install disk at most 1600 GB; no disk wipe | `patches/nodes/control-1/00-install.yaml` (`disk.size <= 1600u * GB`, excluding loop devices, read-only devices and CD-ROMs) |
+| Hostname `k8s-control-1` | `patches/nodes/control-1/01-hostname.yaml` |
+| Machine certificate SANs `127.0.0.1` and VIP | `patches/all/02-machine.yaml` |
+| Cluster pod/service networks | `patches/all/10-cluster.yaml` |
+| `eth0`, static address, default gateway, VIP | `patches/nodes/control-1/20-network.yaml` |
+| DNS `1.1.1.1`, `8.8.8.8`; all three hostDNS flags | `patches/all/21-resolver.yaml` |
+| Server certificate rotation, maxPods 250, shutdown 15s/10s, GC 50/30/30m | `patches/all/30-kubelet.yaml` |
+| OpenEBS and Longhorn bind mounts with `bind,rshared,rw` | `patches/all/30-kubelet.yaml` |
+| Control-plane scheduling | `patches/control-plane/30-scheduling.yaml` |
+| All 14 sysctls, Cloudflare NTP and 13 registry mirrors with original endpoint order | `patches/all/40-system.yaml` |
+| `nvme_tcp`, `vfio_pci`, `uio_pci_generic` | `patches/all/41-kernel.yaml` |
+| Containerd `discard_unpacked_layers = false` | `patches/all/42-cri.yaml` |
+| `/etc/nfsmount.conf`, mode 0644, NFS 4.2/hard/nconnect 16/noatime | `patches/all/43-nfs.yaml` |
+| Kubernetes 1.37, API access for system-upgrade, aggregator routing, controller/scheduler bind addresses, scheduler policy, disabled proxy and metrics address, PodSecurity exemptions, no Flannel | `patches/control-plane/10-kubernetes.yaml` |
+| etcd metrics at `http://0.0.0.0:2381` | `patches/control-plane/20-etcd.yaml` |
+| Docker Hub authentication, when copied into active patches | `examples/44-registry-auth.yaml` |
+| Optional NVIDIA modules and BPF hardening | `examples/50-nvidia.yaml` |
 
 The API server endpoint is passed to `talosctl gen config`; its additional SANs
-are in `control-plane/10-kubernetes.yaml`. The two existing storage mounts require the official legacy
+are in `patches/control-plane/10-kubernetes.yaml`. The two existing storage mounts require the official legacy
 `machine.kubelet` section: Talos 1.14's `KubeletConfig` has no `extraMounts` field.
 The generated `KubeletConfig` document is deleted to avoid conflicting configuration.
 The machine certificate SANs and etcd metrics also use official legacy fields.
 These remain loose YAML patches; no replacement configuration schema is introduced.
 
-## Select the actual installation disk
 
-Inspect `talosctl get disks` on the target node before installation. A maximum
-size alone also matches small loop devices; the template explicitly excludes
-those and read-only/CD-ROM devices, and preserves the legacy selector's
-`disk.transport != ""` condition. It can still match multiple writable disks.
-Refine `provisioning.diskSelector.match` to the intended disk's `disk.serial` or
-`disk.dev_path`. For example, **only if your disk inventory identifies `/dev/sda`
-as the intended installation disk**, use `disk.dev_path == "/dev/sda"`.
-
-Sizes in CEL use multiplication, e.g. `disk.size <= 2u * TB`, not `disk.size <= 2TB`.
-The `booting` machine stage does not confirm installation has succeeded. If Talos
-reports `bootstrap is not available yet`, inspect `talosctl dmesg` for installation
-errors before retrying. Replacing the clustertool binary does not overwrite your
-existing loose YAML files; update your own disk selector as well.
-
-## Existing cluster migration: preserve PKI first
-
-Keep a secure backup of the old secrets, talosconfig and a complete generated
-control-plane machine configuration before updating the repository. Do not delete
-the old identity and let init generate a new one. Init refuses to create new CAs
-when legacy configuration or generated credentials are detected.
-
-With the existing configuration decrypted, use the official Talos command to
-extract its identity into the new location (replace the input path with your actual
-old full control-plane configuration):
-
-```sh
-talosctl gen secrets --from-controlplane-config /secure-backup/controlplane.yaml --output-file clusters/main/talos/secrets.sops.yaml
-```
-
-Do not use a partial patch or the client `talosconfig` as input. Do not overwrite an
-existing native secrets bundle. Preserve the old backup until migration is verified.
-This extraction is preferable to manually converting Talhelper-specific encodings.
-
-Migrate all custom settings to the loose files and register your customized
-schematic if it differs from the supplied one. Move `talos/talconfig.yaml` out of
-the active configuration only after that review; generation refuses to silently
-ignore it. Then run init, genconfig and compare the resulting CA certificates,
-cluster identity, networks, mounts, extensions and workload settings with the old
-configuration. Encrypt the new secrets before committing. Apply only after this
-comparison and the applicable Talos upgrade prerequisites are satisfied.
-
-## Verification and references
-
-### Download a Linux test build before merging
-
-Open the **clustertool-linux-amd64-test-build** run in GitHub Actions and download
-the `.tar.gz` file from its summary or Artifacts section. The archive contains
-`clustertool`, `LICENSE` and `BUILD.txt`; the binary embeds the Linux amd64 Talos
-CLI and pre-commit helper. The filename and build information identify the exact
-PR commit. No tag or GitHub release is created, and artifacts expire after 14 days.
-
-The workflow runs automatically on PR updates, including draft PRs. Use **Re-run
-all jobs** on an existing run to build it again. The separate **Run workflow**
-button becomes available once the workflow exists on the default branch; it then
-lets you select the branch to build. No merge is needed to download a PR build.
-
-Run `go test ./...`. With `talosctl` 1.14 on PATH, run
-`TALOSCTL_INTEGRATION=1 go test ./...` for real generation, patching and validation
-tests, including failure preservation and Docker Hub credentials. Building the
-release requires downloading the embedded assets with `bash embed/download_talosctl.sh`.
-
-* [Talos configuration document map](https://docs.siderolabs.com/talos/v1.14/reference/configuration/document-map)
-* [KubeletConfig fields](https://docs.siderolabs.com/talos/v1.14/reference/configuration/kubernetes/kubeletconfig)
-* [Official legacy configuration](https://docs.siderolabs.com/talos/v1.14/reference/configuration/v1alpha1/config)
-* [Boot assets and Image Factory](https://docs.siderolabs.com/talos/v1.14/platform-specific-installations/boot-assets)
-* [Image Factory API](https://github.com/siderolabs/image-factory/blob/main/docs/api.md)
+See [multinode verification](multinode-validation.md) for automated coverage and
+live acceptance. Encrypt secrets with `clustertool encrypt` before committing.

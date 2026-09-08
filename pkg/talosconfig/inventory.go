@@ -16,10 +16,10 @@ import (
 
 // Inventory contains command targeting metadata only. Talos settings stay in patches.
 type Inventory struct {
-	Version       int    `yaml:"version"`
+	APIVersion    string `yaml:"apiVersion"`
+	Kind          string `yaml:"kind"`
 	BootstrapNode string `yaml:"bootstrapNode"`
 	Nodes         []Node `yaml:"nodes"`
-	Legacy        bool   `yaml:"-"`
 }
 
 type Node struct {
@@ -31,21 +31,9 @@ type Node struct {
 var nodeName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 
 func LoadInventory() (*Inventory, error) {
-	data, err := os.ReadFile(filepath.Join(helper.TalosPath, "inventory.yaml"))
-	if os.IsNotExist(err) {
-		if _, err := os.Stat(filepath.Join(helper.TalosPath, "nodes")); err == nil {
-			return nil, fmt.Errorf("nodes/ exists without inventory.yaml; finish the inventory migration instead of falling back to MASTER1IP")
-		} else if !os.IsNotExist(err) {
-			return nil, err
-		}
-		address := helper.TalEnv["MASTER1IP_IP"]
-		if address == "" {
-			return nil, fmt.Errorf("inventory.yaml or MASTER1IP is required")
-		}
-		return &Inventory{Version: 1, BootstrapNode: "controlplane", Legacy: true, Nodes: []Node{{Name: "controlplane", Role: "control-plane", Address: address}}}, nil
-	}
+	data, err := os.ReadFile(filepath.Join(helper.TalosPath, "clustertool.yaml"))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read required clustertool.yaml: %w", err)
 	}
 	// The embedded inventory is a template so init can copy one consistent
 	// layout while the actual management addresses remain in clusterenv.yaml.
@@ -54,21 +42,21 @@ func LoadInventory() (*Inventory, error) {
 	if strings.Contains(string(data), "${") {
 		data, err = render(data, helper.TalEnv)
 		if err != nil {
-			return nil, fmt.Errorf("render inventory: %w", err)
+			return nil, fmt.Errorf("render clustertool.yaml: %w", err)
 		}
 	}
 	var inv Inventory
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
 	dec.KnownFields(true)
 	if err := dec.Decode(&inv); err != nil {
-		return nil, fmt.Errorf("read inventory: %w", err)
+		return nil, fmt.Errorf("read clustertool.yaml: %w", err)
 	}
 	var extra any
 	if err := dec.Decode(&extra); err != io.EOF {
-		return nil, fmt.Errorf("inventory must contain exactly one YAML document")
+		return nil, fmt.Errorf("clustertool.yaml must contain exactly one YAML document")
 	}
-	if inv.Version != 1 || len(inv.Nodes) == 0 {
-		return nil, fmt.Errorf("inventory requires version: 1 and at least one node")
+	if inv.APIVersion != "clustertool/v1" || inv.Kind != "ClusterConfig" || len(inv.Nodes) == 0 {
+		return nil, fmt.Errorf("clustertool.yaml requires apiVersion: clustertool/v1, kind: ClusterConfig and at least one node")
 	}
 	names, addresses := map[string]bool{}, map[string]bool{}
 	bootstrap := false
@@ -88,7 +76,7 @@ func LoadInventory() (*Inventory, error) {
 		if n.Name == inv.BootstrapNode && n.Role == "control-plane" {
 			bootstrap = true
 		}
-		dir := filepath.Join(helper.TalosPath, "nodes", n.Name)
+		dir := filepath.Join(helper.TalosPath, "patches", "nodes", n.Name)
 		info, err := os.Lstat(dir)
 		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("node %s: missing or unsafe patch directory %s", n.Name, dir)

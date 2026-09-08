@@ -31,7 +31,7 @@ func TestRepeatedLoadTalEnvKeepsEnvironmentBounded(t *testing.T) {
 	})
 	helper.ClusterPath = t.TempDir()
 	helper.TalEnv = map[string]string{}
-	source := "MASTER1IP: 192.0.2.151/24\nVIP: 192.0.2.150\nGATEWAY: 192.0.2.1\nHEADLAMP_IP: 192.0.2.152\nPODNET: 198.51.100.0/24\nSVCNET: 203.0.113.0/24\n"
+	source := "CONTROL1IP: 192.0.2.151/24\nVIP: 192.0.2.150\nGATEWAY: 192.0.2.1\nHEADLAMP_IP: 192.0.2.152\nPODNET: 198.51.100.0/24\nSVCNET: 203.0.113.0/24\n"
 	if err := os.WriteFile(filepath.Join(helper.ClusterPath, "clusterenv.yaml"), []byte(source), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -40,10 +40,10 @@ func TestRepeatedLoadTalEnvKeepsEnvironmentBounded(t *testing.T) {
 		if err := LoadTalEnv(false); err != nil {
 			t.Fatal(err)
 		}
-		if len(helper.TalEnv) != 25 {
-			t.Fatalf("load %d generated %d keys; expected 6 source keys, 18 derived keys and CLUSTERNAME", i, len(helper.TalEnv))
+		if len(helper.TalEnv) != 7 {
+			t.Fatalf("load %d generated %d keys; expected only 6 source keys and CLUSTERNAME", i, len(helper.TalEnv))
 		}
-		if helper.TalEnv["MASTER1IP_IP_IP"] != "" {
+		if helper.TalEnv["CONTROL1IP_IP_IP"] != "" {
 			t.Fatal("recursively derived IP variable")
 		}
 		if i == 0 {
@@ -52,8 +52,8 @@ func TestRepeatedLoadTalEnvKeepsEnvironmentBounded(t *testing.T) {
 			t.Fatalf("load %d changed the environment", i)
 		}
 	}
-	if helper.TalEnv["MASTER1IP_IP"] != "192.0.2.151" || helper.TalEnv["MASTER1IP_CIDR"] != "192.0.2.151/24" {
-		t.Fatal("node address normalization changed")
+	if helper.TalEnv["CONTROL1IP"] != "192.0.2.151/24" || helper.TalEnv["CONTROL1IP_IP"] != "" || helper.TalEnv["CONTROL1IP_CIDR"] != "" {
+		t.Fatal("source value changed or derived address variables were created")
 	}
 	// A child process must still be launchable with the repeatedly loaded environment.
 	if out, err := exec.Command(os.Args[0], "-test.run=^$").CombinedOutput(); err != nil {

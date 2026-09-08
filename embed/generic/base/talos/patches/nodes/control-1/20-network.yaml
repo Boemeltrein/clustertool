@@ -3,11 +3,11 @@ kind: LinkConfig
 name: eth0
 up: true
 addresses:
-  - address: ${MASTER1IP_CIDR}
+  - address: ${CONTROL1IP}/24
 routes:
   - gateway: ${GATEWAY}
 ---
 apiVersion: v1alpha1
 kind: Layer2VIPConfig
 link: eth0
-name: ${VIP_IP}
+name: ${VIP}

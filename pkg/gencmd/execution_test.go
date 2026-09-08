@@ -153,7 +153,7 @@ func TestUpgradeRefusesLiveDowngradeBeforeMutation(t *testing.T) {
 	previous := helper.TalosGenerated
 	helper.TalosGenerated = t.TempDir()
 	t.Cleanup(func() { helper.TalosGenerated = previous })
-	if err := os.WriteFile(filepath.Join(helper.TalosGenerated, "controlplane.yaml"), []byte("apiVersion: v1alpha1\nkind: UnattendedInstallConfig\ninstaller:\n  image: factory.talos.dev/metal-installer/test:v1.14.0\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(helper.TalosGenerated, "control-1.yaml"), []byte("apiVersion: v1alpha1\nkind: UnattendedInstallConfig\ninstaller:\n  image: factory.talos.dev/metal-installer/test:v1.14.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	runCommand = func(args []string, _ bool) ([]byte, error) {

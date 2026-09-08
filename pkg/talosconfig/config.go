@@ -13,17 +13,12 @@ import (
 )
 
 const (
-	SecretsFilename      = "secrets.sops.yaml"
-	ControlPlaneFilename = "controlplane.yaml"
-	TalosconfigFilename  = "talosconfig"
+	SecretsFilename     = "secrets.sops.yaml"
+	TalosconfigFilename = "talosconfig"
 )
 
 func SecretsPath() string {
 	return filepath.Join(helper.TalosPath, SecretsFilename)
-}
-
-func ControlPlanePath() string {
-	return filepath.Join(helper.TalosGenerated, ControlPlaneFilename)
 }
 
 func TalosconfigPath() string {
@@ -40,7 +35,7 @@ func EnsureSecrets() error {
 		return fmt.Errorf("check Talos secrets: %w", err)
 	}
 
-	if err := checkLegacyPKI(); err != nil {
+	if err := checkExistingIdentity(); err != nil {
 		return err
 	}
 
@@ -73,137 +68,42 @@ func EnsureSecrets() error {
 	return file.Close()
 }
 
-// Generate builds a native Talos control-plane configuration using the stable
-// secrets bundle and the documents in all/ and control-plane/.
+// Generate validates every configured node before publishing the output.
 func Generate() error {
 	inv, err := LoadInventory()
 	if err != nil {
 		return err
 	}
-	if !inv.Legacy {
-		return generateInventory(inv)
-	}
-	if err := ValidateNode(""); err != nil {
-		return err
-	}
-	if _, err := os.Stat(filepath.Join(helper.TalosPath, "talconfig.yaml")); err == nil {
-		return fmt.Errorf("legacy talconfig.yaml exists: migrate its settings first (docs/native-talos.md)")
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-
-	if _, err := os.Stat(SecretsPath()); err != nil {
-		return fmt.Errorf("Talos secrets are missing; run clustertool init first: %w", err)
-	}
-
-	endpoint := "https://" + helper.TalEnv["VIP_IP"] + ":6443"
-	if helper.TalEnv["VIP_IP"] == "" {
-		endpoint = "https://" + helper.TalEnv["MASTER1IP_IP"] + ":6443"
-	}
-
-	workDir, err := os.MkdirTemp(helper.TalosPath, ".generate-")
-	if err != nil {
-		return fmt.Errorf("create temporary Talos directory: %w", err)
-	}
-	defer os.RemoveAll(workDir)
-
-	if err := runTalosctl(
-		"gen", "config", helper.ClusterName, endpoint,
-		"--with-secrets", SecretsPath(),
-		"--output", workDir,
-		"--output-types", "controlplane,talosconfig",
-		"--with-docs=false", "--with-examples=false",
-	); err != nil {
-		return fmt.Errorf("generate Talos base configuration: %w", err)
-	}
-
-	patches, err := renderPatches(workDir)
-	if err != nil {
-		return err
-	}
-
-	staged := filepath.Join(workDir, "validated")
-	if err := os.MkdirAll(staged, 0o700); err != nil {
-		return fmt.Errorf("create generated Talos directory: %w", err)
-	}
-
-	args := []string{"machineconfig", "patch", filepath.Join(workDir, "controlplane.yaml")}
-	for _, patch := range patches {
-		args = append(args, "--patch", "@"+patch)
-	}
-	output := filepath.Join(staged, ControlPlaneFilename)
-	args = append(args, "--output", output)
-	if err := runTalosctl(args...); err != nil {
-		return fmt.Errorf("apply Talos configuration documents: %w", err)
-	}
-
-	if err := os.Chmod(output, 0o600); err != nil {
-		return fmt.Errorf("protect generated control-plane configuration: %w", err)
-	}
-
-	if err := runTalosctl("validate", "--config", output, "--mode", "metal"); err != nil {
-		return err
-	}
-	tc := filepath.Join(workDir, "talosconfig")
-	for _, field := range []string{"endpoint", "node"} {
-		if err := runTalosctl("--talosconfig", tc, "config", field, helper.TalEnv["MASTER1IP_IP"]); err != nil {
-			return err
-		}
-	}
-	data, err := os.ReadFile(tc)
-	if err != nil {
-		return fmt.Errorf("read generated talosconfig: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(staged, TalosconfigFilename), data, 0o600); err != nil {
-		return fmt.Errorf("write generated talosconfig: %w", err)
-	}
-
-	return publish(staged)
+	return generateInventory(inv)
 }
 
-func renderPatches(workDir string) ([]string, error) {
-	return renderPatchDirs(workDir, []string{"all", "control-plane"}, true)
-}
-
-func renderPatchDirs(workDir string, dirs []string, requireNonempty bool) ([]string, error) {
+func renderPatchDirs(workDir string, dirs []string) ([]string, error) {
 	var sourceFiles []string
 	for _, relative := range dirs {
-		dir := filepath.Join(helper.TalosPath, relative)
+		dir := filepath.Join(helper.TalosPath, "patches", relative)
 		if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("symlink patch directory is not supported: %s", dir)
 		}
 		entries, err := os.ReadDir(dir)
-		if os.IsNotExist(err) && !requireNonempty && (relative == "worker" || relative == "control-plane") {
+		if os.IsNotExist(err) && (relative == "worker" || relative == "control-plane") {
 			continue
 		}
-		if os.IsNotExist(err) && !requireNonempty && strings.HasPrefix(relative, "nodes") {
+		if os.IsNotExist(err) && strings.HasPrefix(relative, "nodes") {
 			return nil, fmt.Errorf("node patch directory %s is required", dir)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("read Talos document directory %s: %w", dir, err)
 		}
-		count := 0
 		for _, entry := range entries {
 			if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
 				if entry.Type()&os.ModeSymlink != 0 {
 					return nil, fmt.Errorf("symlink patch is not supported: %s", filepath.Join(dir, entry.Name()))
 				}
 				sourceFiles = append(sourceFiles, filepath.Join(dir, entry.Name()))
-				count++
 			}
-		}
-		if count == 0 && requireNonempty {
-			return nil, fmt.Errorf("no Talos documents in %s", dir)
 		}
 	}
 
-	user, pass := helper.TalEnv["DOCKERHUB_USER"], helper.TalEnv["DOCKERHUB_PASSWORD"]
-	if (user == "") != (pass == "") {
-		return nil, fmt.Errorf("set both DOCKERHUB_USER and DOCKERHUB_PASSWORD or neither")
-	}
-	if user != "" {
-		sourceFiles = append(sourceFiles, filepath.Join(helper.TalosPath, "optional", "44-registry-auth.yaml"))
-	}
 	rendered := make([]string, 0, len(sourceFiles))
 	for index, source := range sourceFiles {
 		raw, err := os.ReadFile(source)

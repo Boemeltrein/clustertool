@@ -12,7 +12,7 @@ func TestBootstrapEndpointsAndResume(t *testing.T) {
 	for _, resumed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "new", true: "resumed"}[resumed], func(t *testing.T) {
 			mockExecution(t)
-			inv := &talosconfig.Inventory{Version: 1, BootstrapNode: "cp2", Nodes: []talosconfig.Node{
+			inv := &talosconfig.Inventory{APIVersion: "clustertool/v1", Kind: "ClusterConfig", BootstrapNode: "cp2", Nodes: []talosconfig.Node{
 				{Name: "cp1", Role: "control-plane", Address: "192.0.2.11"},
 				{Name: "cp2", Role: "control-plane", Address: "192.0.2.12"},
 				{Name: "cp3", Role: "control-plane", Address: "192.0.2.13"},

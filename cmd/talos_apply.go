@@ -15,14 +15,14 @@ import (
 )
 
 var applyLongHelp = strings.TrimSpace(`
-The "apply" command validates and applies your Talos configuration to the selected inventory nodes, existing or new.
+The "apply" command validates and applies your Talos configuration to the nodes selected in clustertool.yaml, existing or new.
 
 This is the recommended command for both initial cluster bootstrap and day-2 Talos config maintenance.
 
 ## Bootstrapping
 If the cluster has not been bootstrapped yet, Apply will automatically detect this and ask if you want to bootstrap the cluster
 
-Bootstrapping applies the generated native Talos configuration to the inventory bootstrap node and then bootstraps the cluster.
+Bootstrapping applies the generated native Talos configuration to the configured bootstrap node and then bootstraps the cluster.
 
 After this is done, we apply a number of helm-charts and manifests by default such as:
 

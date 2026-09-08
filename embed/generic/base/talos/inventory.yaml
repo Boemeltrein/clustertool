@@ -1,7 +1,0 @@
-version: 1
-bootstrapNode: control-1
-nodes:
-  - name: control-1
-    role: control-plane
-    # init copies this template; the value is resolved from clusterenv.yaml.
-    address: ${MASTER1IP_IP}

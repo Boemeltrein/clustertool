@@ -10,11 +10,6 @@ import (
 )
 
 func generateInventory(inv *Inventory) error {
-	if _, err := os.Stat(filepath.Join(helper.TalosPath, "talconfig.yaml")); err == nil {
-		return fmt.Errorf("legacy talconfig.yaml exists: migrate settings and identity before generation")
-	} else if !os.IsNotExist(err) {
-		return err
-	}
 	if _, err := os.Stat(SecretsPath()); err != nil {
 		return fmt.Errorf("existing cluster secrets are required: %w", err)
 	}
@@ -23,7 +18,7 @@ func generateInventory(inv *Inventory) error {
 		return err
 	}
 	defer os.RemoveAll(work)
-	endpoint := helper.TalEnv["VIP_IP"]
+	endpoint := helper.TalEnv["VIP"]
 	if endpoint == "" {
 		endpoint = inv.Bootstrap().Address
 	}
@@ -43,7 +38,7 @@ func generateInventory(inv *Inventory) error {
 		if err = os.Mkdir(nodeWork, 0700); err != nil {
 			return err
 		}
-		patches, err := renderPatchDirs(nodeWork, []string{"all", node.Role, filepath.Join("nodes", node.Name)}, false)
+		patches, err := renderPatchDirs(nodeWork, []string{"all", node.Role, filepath.Join("nodes", node.Name)})
 		if err != nil {
 			return fmt.Errorf("node %s: %w", node.Name, err)
 		}

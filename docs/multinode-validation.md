@@ -16,11 +16,11 @@ audit. Offline passing tests do not establish successful live HA upgrades.
 | Bootstrap | CNI/CSR installation precedes joins. An identity-bound checkpoint permits explicit initial setup to resume; live etcd evidence prevents a duplicate bootstrap. Chart errors propagate. |
 | Upgrade | Per-node image/schematic is retained; obsolete `--preserve` is removed. Version and quorum checks precede mutation. Kubernetes runs once, with an initial dry run; `--talos-only` skips it. |
 | Control-plane failover | Cluster health and default kubeconfig/Kubernetes-upgrade commands select a reachable authenticated control plane. |
-| Migration | Init rejects existing inventory-less layouts. Existing native secrets are retained; custom Talhelper migration remains an explicit, documented operator step. |
+| Configuration | Required `clustertool.yaml` with `apiVersion: clustertool/v1` and `kind: ClusterConfig`; no legacy fallback or migration. Source variables are preserved without derived IP values. |
 | Scaffold | The inventory and node patches remain copied embedded files. There is no programmatic template generator. |
 
 One design correction is required: **Talos 1.14 permits `KubeTalosAPIAccessConfig`
-and `KubeProxyConfig` only on control-plane machines.** Moving them to `all/`
+and `KubeProxyConfig` only on control-plane machines.** Moving them to `patches/all/`
 fails real worker validation. They remain control-plane documents. Tuppr continues
 to discover schematics from running nodes; it does not consume this inventory.
 
@@ -54,9 +54,9 @@ Use **three control planes and at least one worker** to test rolling HA maintena
 The two-control-plane offline fixture proves configuration generation, not HA:
 two voting etcd members cannot keep quorum while one reboots.
 
-1. Review each inventory address, hostname, installer image, disk selector and
+1. Review each address in `clustertool.yaml`, hostname, installer image, disk selector and
    static network patch. Remove VIP documents from workers. Back up credentials.
-2. Run `clustertool talos genconfig`. Confirm one generated file per inventory node
+2. Run `clustertool genconfig`. Confirm one generated file per inventory node
    and a talosconfig whose endpoints are all control planes. Compare intended node
    settings and verify that secrets have not changed.
 3. Run `clustertool talos apply all` for initial installation. Confirm that bootstrap
@@ -65,7 +65,7 @@ two voting etcd members cannot keep quorum while one reboots.
 4. Interrupt a separate disposable bootstrap after etcd is established. Resume with
    `talos apply all`; confirm no second bootstrap RPC and no reinstall of already
    deployed Helm releases. A failed/pending Helm release must be recovered explicitly.
-5. Add a new worker to an existing cluster. Apply by inventory name; confirm that
+5. Add a new worker to an existing cluster. Apply by configured name; confirm that
    no new-cluster prompt appears and that the worker receives its own image/network.
 6. Add a small native `KubeNodeConfig.labels` patch to one node, such as
    `clustertool.test: "true"`. Generate, apply that name, and verify the Kubernetes

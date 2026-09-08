@@ -9,9 +9,6 @@ import (
 
 func TestBootstrapCheckpointBindsIdentity(t *testing.T) {
 	withSingleNodeFixture(t)
-	oldPath := helper.TalosPath
-	helper.TalosPath = t.TempDir()
-	t.Cleanup(func() { helper.TalosPath = oldPath })
 	secrets := filepath.Join(helper.TalosPath, "secrets.sops.yaml")
 	if err := os.WriteFile(secrets, []byte("identity-one"), 0600); err != nil {
 		t.Fatal(err)

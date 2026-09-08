@@ -21,7 +21,7 @@ func fixture(t *testing.T) {
 	helper.TalosPath = filepath.Join(t.TempDir(), "talos")
 	helper.TalosGenerated = filepath.Join(helper.TalosPath, "generated")
 	helper.ClusterName = "main"
-	helper.TalEnv = map[string]string{"CLUSTERNAME": "main", "MASTER1IP_IP": "192.168.20.210", "MASTER1IP_CIDR": "192.168.20.210/24", "VIP_IP": "192.168.20.200", "GATEWAY": "192.168.20.1", "PODNET": "172.16.0.0/16", "SVCNET": "172.17.0.0/16"}
+	helper.TalEnv = map[string]string{"CLUSTERNAME": "main", "CONTROL1IP": "192.168.20.210", "VIP": "192.168.20.200", "GATEWAY": "192.168.20.1", "PODNET": "172.16.0.0/16", "SVCNET": "172.17.0.0/16"}
 	t.Cleanup(func() {
 		helper.TalosPath = oldPath
 		helper.TalosGenerated = oldGenerated
@@ -48,31 +48,12 @@ func fixture(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// The embedded scaffold is inventory-first. Keep this fixture focused on
-	// the legacy fallback tests by removing the copied inventory template.
-	if err := os.Remove(filepath.Join(helper.TalosPath, "inventory.yaml")); err != nil {
-		t.Fatal(err)
-	}
-	// Legacy generation still expects the node-specific documents in all/.
-	for _, name := range []string{"00-install.yaml", "01-hostname.yaml", "20-network.yaml"} {
-		source := filepath.Join(helper.TalosPath, "nodes", "control-1", name)
-		destination := filepath.Join(helper.TalosPath, "all", name)
-		data, err := os.ReadFile(source)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(destination, data, 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.RemoveAll(filepath.Join(helper.TalosPath, "nodes")); err != nil {
-		t.Fatal(err)
-	}
+
 }
 
-func TestExistingSecretsAndLegacyGuard(t *testing.T) {
+func TestExistingSecretsAndIdentityGuard(t *testing.T) {
 	fixture(t)
-	for _, path := range []string{filepath.Join(helper.TalosPath, "talconfig.yaml"), filepath.Join(helper.TalosGenerated, "talsecret.yaml"), TalosconfigPath()} {
+	for _, path := range []string{TalosconfigPath()} {
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -128,7 +109,7 @@ func TestNativeGenerationIntegration(t *testing.T) {
 	if err := Generate(); err != nil {
 		t.Fatal(err)
 	}
-	config, _ := os.ReadFile(ControlPlanePath())
+	config, _ := os.ReadFile(NodeConfigPath(Node{Name: "control-1"}))
 	tc, _ := os.ReadFile(TalosconfigPath())
 	docs := readDocuments(t, config)
 	legacy := docs["/"]
@@ -202,12 +183,12 @@ func TestNativeGenerationIntegration(t *testing.T) {
 		t.Fatal("PKI changed")
 	}
 	// A valid document with invalid Talos semantics must not publish either file.
-	bad := filepath.Join(helper.TalosPath, "all", "99-invalid.yaml")
+	bad := filepath.Join(helper.TalosPath, "patches", "nodes", "control-1", "99-invalid.yaml")
 	os.WriteFile(bad, []byte("apiVersion: v1alpha1\nkind: UnattendedInstallConfig\nprovisioning:\n  diskSelector:\n    match: nonexistent.field > 0\n"), 0600)
 	if err := Generate(); err == nil {
 		t.Fatal("invalid Talos document accepted")
 	}
-	after, _ = os.ReadFile(ControlPlanePath())
+	after, _ = os.ReadFile(NodeConfigPath(Node{Name: "control-1"}))
 	if !bytes.Equal(config, after) {
 		t.Fatal("failed generation replaced valid machine config")
 	}
@@ -218,51 +199,28 @@ func TestNativeGenerationIntegration(t *testing.T) {
 	os.Remove(bad)
 	helper.TalEnv["DOCKERHUB_USER"] = "test-user"
 	helper.TalEnv["DOCKERHUB_PASSWORD"] = "a:\"b#c\\d"
+	// Credentials alone must never activate an example.
 	if err := Generate(); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(ControlPlanePath())
+	withoutAuth, _ := os.ReadFile(NodeConfigPath(Node{Name: "control-1"}))
+	if bytes.Contains(withoutAuth, []byte("kind: RegistryAuthConfig")) {
+		t.Fatal("example activated automatically")
+	}
+	auth, err := os.ReadFile(filepath.Join(helper.TalosPath, "examples", "44-registry-auth.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(helper.TalosPath, "patches", "nodes", "control-1", "44-registry-auth.yaml"), auth, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Generate(); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(NodeConfigPath(Node{Name: "control-1"}))
 	docs = readDocuments(t, data)
 	for _, name := range []string{"docker.io", "registry-1.docker.io"} {
 		require(at(docs["RegistryAuthConfig/"+name], "password"), helper.TalEnv["DOCKERHUB_PASSWORD"])
-	}
-}
-
-func TestLegacyIdentityExtractionIntegration(t *testing.T) {
-	if os.Getenv("TALOSCTL_INTEGRATION") != "1" {
-		t.Skip("requires talosctl 1.14")
-	}
-	fixture(t)
-	if err := EnsureSecrets(); err != nil {
-		t.Fatal(err)
-	}
-	oldDir := t.TempDir()
-	if err := runTalosctl("gen", "config", "main", "https://192.168.20.200:6443", "--talos-version", "v1.13.10", "--with-secrets", SecretsPath(), "--output", filepath.Join(oldDir, "controlplane.yaml"), "--output-types", "controlplane"); err != nil {
-		t.Fatal(err)
-	}
-	extracted := filepath.Join(t.TempDir(), "secrets.yaml")
-	if err := runTalosctl("gen", "secrets", "--from-controlplane-config", filepath.Join(oldDir, "controlplane.yaml"), "--output-file", extracted); err != nil {
-		t.Fatal(err)
-	}
-	oldData, err := os.ReadFile(SecretsPath())
-	if err != nil {
-		t.Fatal(err)
-	}
-	newData, err := os.ReadFile(extracted)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var original, migrated map[string]any
-	if err := yaml.Unmarshal(oldData, &original); err != nil {
-		t.Fatal(err)
-	}
-	if err := yaml.Unmarshal(newData, &migrated); err != nil {
-		t.Fatal(err)
-	}
-	for _, field := range []string{"cluster", "secrets", "trustdinfo", "certs"} {
-		if original[field] == nil || !reflect.DeepEqual(original[field], migrated[field]) {
-			t.Fatalf("identity field %s changed during migration", field)
-		}
 	}
 }
 

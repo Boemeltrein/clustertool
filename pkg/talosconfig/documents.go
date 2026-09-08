@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -22,10 +21,10 @@ func ValidateNode(node string) error {
 	return err
 }
 
-func checkLegacyPKI() error {
-	for _, path := range []string{filepath.Join(helper.TalosPath, "talconfig.yaml"), filepath.Join(helper.TalosGenerated, "talsecret.yaml"), TalosconfigPath()} {
+func checkExistingIdentity() error {
+	for _, path := range []string{TalosconfigPath()} {
 		if _, err := os.Stat(path); err == nil {
-			return fmt.Errorf("existing Talos cluster detected at %s: refusing to generate new CAs; migrate the existing PKI as documented in docs/native-talos.md", path)
+			return fmt.Errorf("existing Talos cluster detected at %s: refusing to generate new CAs; restore secrets.sops.yaml before continuing", path)
 		} else if !os.IsNotExist(err) {
 			return err
 		}
@@ -120,9 +119,6 @@ func render(data []byte, env map[string]string) ([]byte, error) {
 
 // Read only the official fields needed for CLI orchestration from validated
 // output. This does not define or validate another Talos schema.
-func GeneratedValue(kind string, fields ...string) (string, error) {
-	return GeneratedNodeValue(ControlPlanePath(), kind, fields...)
-}
 
 func GeneratedNodeValue(path, kind string, fields ...string) (string, error) {
 	data, err := os.ReadFile(path)
@@ -158,4 +154,3 @@ func GeneratedNodeValue(path, kind string, fields ...string) (string, error) {
 	}
 	return "", fmt.Errorf("generated Talos configuration has no %s %s", kind, strings.Join(fields, "."))
 }
-

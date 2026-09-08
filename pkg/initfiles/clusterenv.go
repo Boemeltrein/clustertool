@@ -2,8 +2,6 @@ package initfiles
 
 import (
 	"bufio"
-	"fmt"
-	"maps"
 	"net"
 	"os"
 	"regexp"
@@ -46,7 +44,6 @@ func LoadTalEnv(noFail bool) error {
 	// If file exists, continue with processing
 	clusterName()
 	checkQuotedNumbersInFile()
-	PostProcessTalEnv()
 	clusterEnvtoEnv()
 	log.Info().Msgf("ClusterEnv loaded successfully\n")
 	return nil
@@ -112,125 +109,11 @@ func clusterName() {
 }
 
 func clusterEnvtoEnv() {
-	// Split IP/NETMASK and normalize IPs
+	// Export source values without synthesizing address variants.
 	for key, value := range helper.TalEnv {
 		os.Setenv(key, value)
 	}
 }
-func PostProcessTalEnv() {
-	// Split IP/NETMASK and normalize IPs
-	// Iterating a snapshot prevents newly inserted entries from being visited
-	// and recursively expanded during the same map iteration.
-	for key, value := range maps.Clone(helper.TalEnv) {
-		ip, netmask, err := splitIPandNetmask(value)
-		if err == nil {
-			// Update TalEnv with IP and NETMASK entries
-			helper.TalEnv[key+"_IP"] = ip
-			helper.TalEnv[key+"_NETMASK"] = netmask
-			helper.TalEnv[key+"_CIDR"] = ip + "/" + netmask
-		}
-	}
-
-	// Validate and normalize specific IP variables
-	ValidateAndNormalizeIPsInTalEnv()
-
-	// Validate and normalize IP/NETMASK variables
-	ValidateAndNormalizeIPNetmaskVarsInTalEnv()
-}
-
-func splitIPandNetmask(ipWithMask string) (string, string, error) {
-	// Check if IP/NETMASK format
-	parts := strings.Split(ipWithMask, "/")
-	if len(parts) == 2 {
-		ip := parts[0]
-		netmask := parts[1]
-		// Validate netmask format (you might want to add more rigorous validation)
-		if _, _, err := net.ParseCIDR(ipWithMask); err != nil {
-			return "", "", fmt.Errorf("invalid IP/NETMASK format: %s", ipWithMask)
-		}
-		return ip, netmask, nil
-	}
-
-	// Assume NETMASK 24 if only IP provided
-	ip := ipWithMask
-	netmask := "24"
-	// Validate IP format (you might want to add more rigorous validation)
-	if net.ParseIP(ip) == nil {
-		return "", "", fmt.Errorf("invalid IP format: %s", ipWithMask)
-	}
-	return ip, netmask, nil
-}
-
-func ValidateAndNormalizeIPsInTalEnv() {
-	ipVariables := []string{"Master1IP"}
-
-	for _, key := range ipVariables {
-		value, exists := helper.TalEnv[key]
-		if !exists {
-			continue // Skip if the variable doesn't exist in TalEnv
-		}
-
-		ip, err := normalizeIP(value)
-		if err != nil {
-			log.Info().Msgf("Error processing %s: %v\n", key, err)
-			continue
-		}
-
-		// Update TalEnv with normalized IP value
-		helper.TalEnv[key] = ip
-	}
-}
-
-func normalizeIP(ipWithMask string) (string, error) {
-	// Check if IP/NETMASK format
-	parts := strings.Split(ipWithMask, "/")
-	if len(parts) == 2 {
-		ip := parts[0]
-		netmask := parts[1]
-		// Validate netmask format (you might want to add more rigorous validation)
-		if _, _, err := net.ParseCIDR(ipWithMask); err != nil {
-			return "", fmt.Errorf("invalid IP/NETMASK format: %s", ipWithMask)
-		}
-		return ip + "/" + netmask, nil
-	}
-
-	// Assume NETMASK 24 if only IP provided
-	ip := ipWithMask
-	// Validate IP format (you might want to add more rigorous validation)
-	if net.ParseIP(ip) == nil {
-		return "", fmt.Errorf("invalid IP format: %s", ipWithMask)
-	}
-	return ip + "/24", nil // Default to /24 subnet mask
-}
-
-func ValidateAndNormalizeIPNetmaskVarsInTalEnv() {
-	netmaskVariables := []string{"PODNET", "SVCNET"}
-
-	for _, key := range netmaskVariables {
-		value, exists := helper.TalEnv[key]
-		if !exists {
-			continue // Skip if the variable doesn't exist in TalEnv
-		}
-
-		ipNetmask, err := normalizeIPNetmask(value)
-		if err != nil {
-			log.Info().Msgf("Error processing %s: %v\n", key, err)
-			continue
-		}
-
-		// Update TalEnv with normalized IP/NETMASK value
-		helper.TalEnv[key] = ipNetmask
-	}
-}
-
-func normalizeIPNetmask(ipNetmask string) (string, error) {
-	// Validate IP/NETMASK format
-	if _, _, err := net.ParseCIDR(ipNetmask); err != nil {
-		return "", fmt.Errorf("invalid IP/NETMASK format: %s", ipNetmask)
-	}
-	return ipNetmask, nil
-}
-
 func CheckEnvVariables() {
 	LoadTalEnv(false)
 	requiredKeys := []string{
@@ -251,13 +134,19 @@ func CheckEnvVariables() {
 		}
 	}
 
+	for _, key := range []string{"VIP", "GATEWAY"} {
+		if net.ParseIP(helper.TalEnv[key]) == nil {
+			log.Error().Msgf("%s must be an IP address without a subnet prefix", key)
+			os.Exit(1)
+		}
+	}
 	inv, err := talosconfig.LoadInventory()
 	if err != nil {
-		log.Error().Err(err).Msg("Invalid node inventory")
+		log.Error().Err(err).Msg("Invalid clustertool.yaml")
 		os.Exit(1)
 	}
 	for _, node := range inv.Nodes {
-		if node.Address == helper.TalEnv["VIP_IP"] || node.Address == helper.TalEnv["GATEWAY"] {
+		if node.Address == helper.TalEnv["VIP"] || node.Address == helper.TalEnv["GATEWAY"] {
 			log.Error().Msgf("Node %s management address overlaps VIP or gateway", node.Name)
 			os.Exit(1)
 		}
@@ -275,7 +164,7 @@ func CheckEnvVariables() {
 		}
 	}
 	// Retain the shared-network checks using the inventory bootstrap address.
-	vip := helper.TalEnv["VIP_IP"]
+	vip := helper.TalEnv["VIP"]
 	bootstrapIP := inv.Bootstrap().Address
 	bootstrapCIDR := bootstrapIP + "/32"
 	if strings.Contains(bootstrapIP, ":") {
