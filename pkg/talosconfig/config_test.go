@@ -65,6 +65,9 @@ func fixture(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if err := os.RemoveAll(filepath.Join(helper.TalosPath, "nodes")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestExistingSecretsAndLegacyGuard(t *testing.T) {

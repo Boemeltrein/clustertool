@@ -4,26 +4,25 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/trueforge-org/clustertool/pkg/gencmd"
-	"github.com/trueforge-org/clustertool/pkg/helper"
+
 	"github.com/trueforge-org/clustertool/pkg/initfiles"
-	"github.com/trueforge-org/clustertool/pkg/nodestatus"
+
 	"github.com/trueforge-org/clustertool/pkg/sops"
 	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 	fthelper "github.com/trueforge-org/forgetool/v4/pkg/helper"
 )
 
 var applyLongHelp = strings.TrimSpace(`
-The "apply" command validates and applies your Talos configuration to the configured single control-plane node, existing or new.
+The "apply" command validates and applies your Talos configuration to the selected inventory nodes, existing or new.
 
 This is the recommended command for both initial cluster bootstrap and day-2 Talos config maintenance.
 
 ## Bootstrapping
 If the cluster has not been bootstrapped yet, Apply will automatically detect this and ask if you want to bootstrap the cluster
 
-Bootstrapping applies the generated native Talos configuration to the single control-plane node and then bootstraps the cluster.
+Bootstrapping applies the generated native Talos configuration to the inventory bootstrap node and then bootstraps the cluster.
 
 After this is done, we apply a number of helm-charts and manifests by default such as:
 
@@ -81,24 +80,32 @@ var apply = &cobra.Command{
 		if err := gencmd.GenConfig(nil); err != nil {
 			return err
 		}
-		bootstrapNode := helper.TalEnv["MASTER1IP_IP"]
-
-		log.Info().Msgf("Checking if first node   is ready to recieve anything... %s", bootstrapNode)
-		status, err := nodestatus.WaitForHealth(bootstrapNode, []string{"running", "maintenance"})
+		inv, err := talosconfig.LoadInventory()
 		if err != nil {
 			return err
 		}
-		if status == "maintenance" {
-			needed, err := nodestatus.CheckNeedBootstrap(bootstrapNode)
-			if err != nil {
-				return err
+		pending, err := gencmd.BootstrapPending()
+		if err != nil {
+			return err
+		}
+		if pending {
+			if node != "" {
+				return fmt.Errorf("initial cluster setup is incomplete; run talos apply all to resume")
 			}
-			if needed {
-				if !fthelper.GetYesOrNo("Bootstrap this new single-node cluster? [y/n]: ", false) {
-					return fmt.Errorf("bootstrap cancelled")
-				}
-				return gencmd.RunBootstrap(extraArgs)
+			return gencmd.RunBootstrap(extraArgs)
+		}
+		needed, err := gencmd.NeedsBootstrap(inv)
+		if err != nil {
+			return err
+		}
+		if needed {
+			if node != "" && node != inv.Bootstrap().Name && node != inv.Bootstrap().Address {
+				return fmt.Errorf("initialize the cluster with talos apply all before joining a selected node")
 			}
+			if !fthelper.GetYesOrNo("All configured control planes report maintenance. Bootstrap this new cluster? [y/n]: ", false) {
+				return fmt.Errorf("bootstrap cancelled")
+			}
+			return gencmd.RunBootstrap(extraArgs)
 		}
 		return RunApply(true, node, extraArgs)
 	},
@@ -111,7 +118,7 @@ func RunApply(kubeconfig bool, node string, extraArgs []string) error {
 	}
 
 	if kubeconfig {
-		kubeconfigcmds := gencmd.GenPlain("kubeconfig", helper.TalEnv["VIP_IP"], []string{"-f"})
+		kubeconfigcmds := gencmd.GenPlain("kubeconfig", "", []string{"-f"})
 		return gencmd.ExecCmd(kubeconfigcmds[0])
 	}
 

@@ -31,59 +31,65 @@ func RunBootstrap(args []string) error {
 		return err
 	}
 
-	bootstrapNode := helper.TalEnv["MASTER1IP_IP"]
-
-	if _, err := nodestatus.WaitForHealth(bootstrapNode, []string{"maintenance"}); err != nil {
+	inv, err := talosconfig.LoadInventory()
+	if err != nil {
 		return err
 	}
-
-	taloscmds := GenApply(bootstrapNode, extraArgs)
-
-	if err := ExecCmds(taloscmds, false); err != nil {
+	bootstrapNode := inv.Bootstrap().Address
+	applyCommands, cleanup, err := freezeCommands(GenApply("", extraArgs))
+	if err != nil {
 		return err
 	}
-
-	if _, err := nodestatus.WaitForHealth(bootstrapNode, []string{"booting"}); err != nil {
-		return err
-	}
-
-	log.Info().Msgf("Bootstrap: node %s is booting; disk installation may still be in progress. If bootstrap remains unavailable, inspect Talos installation logs and the disk selector.", bootstrapNode)
-
-	log.Info().Msgf("Bootstrap: running bootstrap on node:  %s", bootstrapNode)
-	bootstrapcmds := GenPlain("bootstrap", bootstrapNode, nil)
-
-	if err := ExecCmd(bootstrapcmds[0]); err != nil {
-		return err
-	}
-
-	log.Info().Msgf("Bootstrap: waiting for VIP %v to come online...", helper.TalEnv["VIP_IP"])
-	if _, err := nodestatus.WaitForHealth(helper.TalEnv["VIP_IP"], []string{"running"}); err != nil {
-		return err
-	}
-
-	// Bootstrap is performed once. All remaining inventory nodes join the
-	// established cluster with their own generated configuration afterwards.
-	if inv, err := talosconfig.LoadInventory(); err != nil {
-		return err
-	} else {
-		for _, node := range inv.Nodes {
-			if node.Address == bootstrapNode {
-				continue
+	defer cleanup()
+	applyNode := func(address string) error {
+		for _, command := range applyCommands {
+			if command.Err != nil {
+				return command.Err
 			}
-			log.Info().Msgf("Bootstrap: applying configuration to joining node %s (%s)", node.Name, node.Address)
-			if err := ExecCmds(GenApply(node.Address, extraArgs), false); err != nil {
-				return fmt.Errorf("apply joining node %s: %w", node.Name, err)
+			if command.Node == address {
+				command.Snapshot = false
+				return ExecCmds([]Command{command}, false)
 			}
-			if _, err := nodestatus.WaitForHealth(node.Address, []string{"running"}); err != nil {
-				return fmt.Errorf("wait for joining node %s: %w", node.Name, err)
+		}
+		return fmt.Errorf("node %s missing from bootstrap snapshot", address)
+	}
+	if err := beginBootstrap(); err != nil {
+		return err
+	}
+
+	if _, err := ExistingControlPlane(inv); err != nil {
+		stage, err := checkStatus(bootstrapNode)
+		if err != nil {
+			return err
+		}
+		if stage == "maintenance" {
+			if err := applyNode(bootstrapNode); err != nil {
+				return err
+			}
+		} else if stage != "booting" && stage != "running" {
+			return fmt.Errorf("bootstrap node is in unexpected stage %s", stage)
+		}
+		if _, err := nodestatus.WaitForHealth(bootstrapNode, []string{"booting", "running"}); err != nil {
+			return err
+		}
+		log.Info().Msgf("Bootstrap: waiting for installation/bootstrap availability on %s; inspect the disk selector and installation logs if it remains unavailable", bootstrapNode)
+		// Check again after installation: a prior interrupted RPC may have succeeded.
+		if _, err := ExistingControlPlane(inv); err != nil {
+			if err := ExecCmd(GenPlain("bootstrap", bootstrapNode, nil)[0]); err != nil {
+				return err
 			}
 		}
 	}
 
-	log.Info().Msgf("Bootstrap: Configuring kubeconfig/kubectl for VIP: %v", helper.TalEnv["VIP_IP"])
+	log.Info().Msgf("Bootstrap: waiting for control plane %v to come online...", bootstrapNode)
+	if _, err := nodestatus.WaitForHealth(bootstrapNode, []string{"running"}); err != nil {
+		return err
+	}
+
+	log.Info().Msgf("Bootstrap: retrieving kubeconfig through control plane %v", bootstrapNode)
 	// Ensure kubeconfig is loaded
 
-	kubeconfigcmds := GenPlain("kubeconfig", helper.TalEnv["VIP_IP"], []string{"-f"})
+	kubeconfigcmds := GenPlain("kubeconfig", bootstrapNode, []string{"-f"})
 	if err := ExecCmd(kubeconfigcmds[0]); err != nil {
 		return err
 	}
@@ -95,7 +101,7 @@ func RunBootstrap(args []string) error {
 		"kube-apiserver",
 	}
 
-	log.Info().Msgf("Bootstrap: Waiting for system Pods to be running for: %v", helper.TalEnv["VIP_IP"])
+	log.Info().Msgf("Bootstrap: Waiting for system Pods to be running for: %v", bootstrapNode)
 	if err := kubectlcmds.CheckStatus(requiredPods, []string{}, 600); err != nil {
 		log.Error().Err(err).Msgf("Error: %v\n", err)
 
@@ -134,10 +140,35 @@ func RunBootstrap(args []string) error {
 		// Pulled directly from upstream, due to this being very complex and important
 		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/kube-system/cilium/app"), Retry: false, Wait: true},
 		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/kube-system/kubelet-csr-approver/app"), Retry: false, Wait: true},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/observability/kube-prometheus-stack/app"), Retry: false, Wait: false},
 	}
 
-	fluxhandler.InstallCharts(baseCharts, HelmRepos, true)
+	if err := fluxhandler.InstallCharts(baseCharts, HelmRepos, true); err != nil {
+		return err
+	}
+	// Bootstrap is performed once. All remaining inventory nodes join the
+	// established cluster with their own generated configuration afterwards.
+	{
+		for _, node := range inv.Nodes {
+			if node.Address == bootstrapNode {
+				continue
+			}
+			log.Info().Msgf("Bootstrap: applying configuration to joining node %s (%s)", node.Name, node.Address)
+			stage, err := checkStatus(node.Address)
+			if err != nil {
+				return fmt.Errorf("inspect joining node %s: %w", node.Name, err)
+			}
+			if stage == "maintenance" {
+				if err := applyNode(node.Address); err != nil {
+					return fmt.Errorf("apply joining node %s: %w", node.Name, err)
+				}
+			} else if stage != "running" && stage != "booting" {
+				return fmt.Errorf("joining node %s is in unexpected stage %s", node.Name, stage)
+			}
+			if _, err := nodestatus.WaitForHealth(node.Address, nil); err != nil {
+				return fmt.Errorf("wait for joining node %s: %w", node.Name, err)
+			}
+		}
+	}
 
 	log.Info().Msg("Bootstrap: Creating Namespaces...")
 
@@ -184,17 +215,20 @@ func RunBootstrap(args []string) error {
 
 	log.Info().Msg("Bootstrap: Base Cluster Configuration Completed, continuing setup...")
 	log.Info().Msg("Bootstrap: Confirming cluster health...")
-	healthcmd := GenPlain("health", helper.TalEnv["VIP_IP"], []string{})
+	healthcmd := GenPlain("health", bootstrapNode, []string{})
 	if err := ExecCmd(healthcmd[0]); err != nil {
 		return err
 	}
 	stopApprover()
 
 	prioCharts := []fluxhandler.HelmChart{
+		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/observability/kube-prometheus-stack/app"), Retry: false, Wait: false},
 		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/cert-manager/app"), Retry: false, Wait: false},
 		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/kubernetes-reflector/app"), Retry: false, Wait: false},
 	}
-	fluxhandler.InstallCharts(prioCharts, HelmRepos, false)
+	if err := fluxhandler.InstallCharts(prioCharts, HelmRepos, false); err != nil {
+		return err
+	}
 
 	intermediateCharts := []fluxhandler.HelmChart{
 		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/metallb/app"), Retry: false, Wait: false},
@@ -208,7 +242,9 @@ func RunBootstrap(args []string) error {
 		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/longhorn/app"), Retry: false, Wait: true},
 	}
 
-	fluxhandler.InstallCharts(intermediateCharts, HelmRepos, true)
+	if err := fluxhandler.InstallCharts(intermediateCharts, HelmRepos, true); err != nil {
+		return err
+	}
 
 	// Desired pod names
 	requiredMLBPods := []string{
@@ -216,7 +252,7 @@ func RunBootstrap(args []string) error {
 		"metallb-speaker",
 	}
 
-	log.Info().Msgf("Bootstrap: Waiting for MetalLB Pods to be running for: %v", helper.TalEnv["VIP_IP"])
+	log.Info().Msgf("Bootstrap: Waiting for MetalLB Pods to be running for: %v", bootstrapNode)
 	if err := kubectlcmds.CheckStatus(requiredMLBPods, []string{}, 600); err != nil {
 		log.Error().Err(err).Msgf("Error: %v\n", err)
 
@@ -237,7 +273,9 @@ func RunBootstrap(args []string) error {
 		}
 	}
 
-	fluxhandler.InstallCharts(lateCharts, HelmRepos, true)
+	if err := fluxhandler.InstallCharts(lateCharts, HelmRepos, true); err != nil {
+		return err
+	}
 
 	log.Info().Msg("Bootstrap: Installing included applications")
 	postCharts := []fluxhandler.HelmChart{
@@ -247,13 +285,14 @@ func RunBootstrap(args []string) error {
 		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/observability/headlamp/app"), Retry: false, Wait: true},
 	}
 
-	fluxhandler.InstallCharts(postCharts, HelmRepos, true)
+	if err := fluxhandler.InstallCharts(postCharts, HelmRepos, true); err != nil {
+		return err
+	}
 
 	log.Info().Msg("------")
 
 	fluxhandler.FluxBootstrap(ctx)
 
 	log.Info().Msg("Bootstrap: Completed Successfully!")
-	return nil
+	return os.Remove(bootstrapStatePath())
 }
-

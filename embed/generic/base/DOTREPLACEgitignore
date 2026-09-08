@@ -7,3 +7,5 @@ cluster/main/kubernetes/**/bootstrap-values.yaml.ct
 talos/.generate-*/
 talos/.secrets-*/
 talos/generated.previous/
+talos/.bootstrap-in-progress.json
+talos/.execute-*/

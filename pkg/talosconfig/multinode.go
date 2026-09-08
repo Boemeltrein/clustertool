@@ -66,6 +66,9 @@ func generateInventory(inv *Inventory) error {
 		if err = runTalosctl("validate", "--config", output, "--mode", "metal"); err != nil {
 			return fmt.Errorf("node %s: %w", node.Name, err)
 		}
+		if err = validateNodeOutput(node, output); err != nil {
+			return err
+		}
 		hostname, err := GeneratedNodeValue(output, "HostnameConfig", "hostname")
 		if err != nil || names[hostname] {
 			return fmt.Errorf("node %s requires a unique explicit HostnameConfig hostname", node.Name)
@@ -92,4 +95,3 @@ func generateInventory(inv *Inventory) error {
 	}
 	return publish(staged)
 }
-

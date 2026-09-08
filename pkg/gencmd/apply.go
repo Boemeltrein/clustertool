@@ -1,32 +1,25 @@
 package gencmd
 
-import (
-	"strings"
+import "github.com/trueforge-org/clustertool/pkg/talosconfig"
 
-	"github.com/trueforge-org/clustertool/embed"
-	"github.com/trueforge-org/clustertool/pkg/talosconfig"
-)
-
-func GenApply(node string, extraArgs []string) []string {
-
-	commands := []string{}
-
-	talosPath := embed.GetTalosExec()
+func GenApply(target string, extra []string) []Command {
+	if err := ValidateExtraArgs(extra); err != nil {
+		return []Command{{Err: err}}
+	}
 	inv, err := talosconfig.LoadInventory()
 	if err != nil {
-		return nil
+		return []Command{{Err: err}}
 	}
-	nodes, err := inv.Select(node)
+	nodes, err := inv.Select(target)
 	if err != nil {
-		return nil
+		return []Command{{Err: err}}
 	}
-	for _, n := range nodes {
-		cmd := talosPath + " apply-config -f " + talosconfig.NodeConfigPath(n) + " --talosconfig " + talosconfig.TalosconfigPath() + " -n " + n.Address
-		if len(extraArgs) > 0 {
-			cmd += " " + strings.Join(extraArgs, " ")
-		}
-		commands = append(commands, cmd)
+	var commands []Command
+	for _, node := range nodes {
+		args := append([]string{"-f", talosconfig.NodeConfigPath(node)}, extra...)
+		command := nodeCommand("apply-config", node, args...)
+		command.Snapshot = true
+		commands = append(commands, command)
 	}
 	return commands
 }
-

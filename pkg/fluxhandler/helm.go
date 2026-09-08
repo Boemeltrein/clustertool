@@ -2,7 +2,9 @@ package fluxhandler
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"helm.sh/helm/v3/pkg/storage/driver"
 	"io/ioutil"
 	"os"
 	"path"
@@ -157,6 +159,15 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 	}
 
 	// Ensure namespace exists or create it
+	if existing, err := action.NewGet(actionConfig).Run(releaseName); err == nil {
+		if existing.Info != nil && existing.Info.Status.String() == "deployed" {
+			log.Info().Msgf("Bootstrap: release %s is already deployed; keeping it", releaseName)
+			return nil
+		}
+		return fmt.Errorf("release %s already exists but is not deployed; resolve its Helm status before resuming bootstrap", releaseName)
+	} else if !errors.Is(err, driver.ErrReleaseNotFound) {
+		return fmt.Errorf("inspect existing release %s: %w", releaseName, err)
+	}
 	if err := ensureNamespace(actionConfig, namespace); err != nil {
 		return fmt.Errorf("failed to ensure namespace exists: %w", err)
 	}
@@ -190,6 +201,8 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 	client.ReleaseName = releaseName
 	client.DryRun = dryRun
 	client.Version = version
+	client.Wait = wait
+	client.Timeout = 15 * time.Minute
 
 	tempValuesName := releaseName + "tempvalues.yaml"
 	tempValuesPath := path.Join(helper.HelmCache, tempValuesName)
@@ -207,7 +220,7 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 
 	helmRelease, err := LoadHelmRelease(helmreleasePath)
 	if err != nil {
-
+		return err
 	}
 	tempHRValuesName := releaseName + "temphrvalues.yaml"
 	tempHRValuesPath := path.Join(helper.HelmCache, tempHRValuesName)
@@ -261,10 +274,6 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 		} else {
 			return fmt.Errorf("failed to install chart: %w", err)
 		}
-	}
-
-	if wait {
-		waitForRelease(actionConfig, release.Name, client.Namespace)
 	}
 
 	log.Printf("Installed Chart: %s in namespace: %s\n", release.Name, release.Namespace)

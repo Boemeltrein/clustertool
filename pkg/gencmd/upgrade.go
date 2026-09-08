@@ -2,62 +2,72 @@ package gencmd
 
 import (
 	"fmt"
-	"strings"
-
-	"github.com/trueforge-org/clustertool/embed"
 	"github.com/trueforge-org/clustertool/pkg/talosconfig"
+	"strings"
 )
 
-func GenUpgrade(node string, extraFlags []string) ([]string, error) {
-	if err := talosconfig.ValidateNode(node); err != nil {
-		return nil, err
-	}
+func GenUpgrade(target string, extra []string) ([]Command, error) {
 	inv, err := talosconfig.LoadInventory()
 	if err != nil {
 		return nil, err
 	}
-	nodes, err := inv.Select(node)
+	nodes, err := inv.Select(target)
 	if err != nil {
 		return nil, err
 	}
-	if err := ValidateExtraArgs(extraFlags); err != nil {
+	if err := ValidateExtraArgs(extra); err != nil {
 		return nil, err
 	}
-	var commands []string
-	for _, n := range nodes {
-		image, err := talosconfig.GeneratedNodeValue(talosconfig.NodeConfigPath(n), "UnattendedInstallConfig", "installer", "image")
+	var commands []Command
+	for _, node := range nodes {
+		image, err := talosconfig.GeneratedNodeValue(talosconfig.NodeConfigPath(node), "UnattendedInstallConfig", "installer", "image")
 		if err != nil {
-			return nil, fmt.Errorf("node %s: %w", n.Name, err)
+			return nil, fmt.Errorf("node %s: %w", node.Name, err)
 		}
-		command := embed.GetTalosExec() + " upgrade --talosconfig " + talosconfig.TalosconfigPath() + " -n " + n.Address + " --preserve --wait --image " + image
-		for _, flag := range extraFlags {
-			command += " " + flag
-		}
+		args := append([]string{"--wait", "--image", image}, extra...)
+		command := nodeCommand("upgrade", node, args...)
+		command.Snapshot = true
 		commands = append(commands, command)
 	}
 	return commands, nil
 }
 
-func GenKubeUpgrade(node string) (string, error) {
+func GenKubeUpgrade(target string) (Command, error) {
 	inv, err := talosconfig.LoadInventory()
 	if err != nil {
-		return "", err
+		return Command{}, err
 	}
-	path := talosconfig.NodeConfigPath(inv.Bootstrap())
-	image, err := talosconfig.GeneratedNodeValue(path, "", "machine", "kubelet", "image")
-	if err != nil {
-		image, err = talosconfig.GeneratedNodeValue(path, "KubeletConfig", "image")
+	node := inv.Bootstrap()
+	if target != "" && target != "all" {
+		nodes, e := inv.Select(target)
+		if e != nil {
+			return Command{}, e
+		}
+		node = nodes[0]
 	}
-	if err != nil {
-		return "", err
+	if node.Role != "control-plane" {
+		return Command{}, fmt.Errorf("Kubernetes upgrade requires a control-plane target")
 	}
-	_, tag, ok := strings.Cut(image, ":")
-	if !ok {
-		return "", fmt.Errorf("kubelet image must contain a Kubernetes version tag")
+	var version string
+	for _, n := range inv.Nodes {
+		image, e := talosconfig.GeneratedNodeValue(talosconfig.NodeConfigPath(n), "", "machine", "kubelet", "image")
+		if e != nil {
+			image, e = talosconfig.GeneratedNodeValue(talosconfig.NodeConfigPath(n), "KubeletConfig", "image")
+		}
+		if e != nil {
+			return Command{}, e
+		}
+		tag := image[strings.LastIndex(image, ":")+1:]
+		tag, _, _ = strings.Cut(tag, "@")
+		if !strings.HasPrefix(tag, "v") {
+			return Command{}, fmt.Errorf("kubelet image requires a version tag")
+		}
+		if version != "" && version != tag {
+			return Command{}, fmt.Errorf("all nodes must have the same desired Kubernetes version")
+		}
+		version = tag
 	}
-	tag, _, _ = strings.Cut(tag, "@")
-	talosPath := embed.GetTalosExec()
-	strout := talosPath + " upgrade-k8s --talosconfig " + talosconfig.TalosconfigPath() + " -n " + node + " --to " + strings.TrimPrefix(tag, "v")
-	return strout, nil
+	command := nodeCommand("upgrade-k8s", node, "--to", strings.TrimPrefix(version, "v"))
+	command.Failover = target == "" || target == "all"
+	return command, nil
 }
-

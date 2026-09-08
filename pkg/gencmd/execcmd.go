@@ -2,134 +2,173 @@ package gencmd
 
 import (
 	"fmt"
-	"strings"
-	"time"
-
-	"github.com/rs/zerolog/log"
 	"github.com/trueforge-org/clustertool/pkg/helper"
 	"github.com/trueforge-org/clustertool/pkg/nodestatus"
-	fthelper "github.com/trueforge-org/forgetool/v4/pkg/helper"
+	"github.com/trueforge-org/clustertool/pkg/talosconfig"
+	"strings"
+	"time"
 )
 
-// ExecCmd retries only the transient bootstrap-not-ready response.
-func ExecCmd(cmd string) error {
-	args := strings.Split(cmd, " ")
-	deadline := time.Now().Add(2 * time.Minute)
+var runCommand = helper.RunBoundedCommand
+var checkStatus = nodestatus.CheckStatus
+var waitReady = func(node string) error { _, err := nodestatus.WaitForHealth(node, nil); return err }
+var guardControlPlane = controlPlaneGuard
+var recoveryDelay = func() { time.Sleep(5 * time.Second) }
+var readBootID = func(node string) (string, error) {
+	inv, err := talosconfig.LoadInventory()
+	if err != nil {
+		return "", err
+	}
+	nodes, err := inv.Select(node)
+	if err != nil {
+		return "", err
+	}
+	out, err := runCommand(nodeCommand("read", nodes[0], "/proc/sys/kernel/random/boot_id", "-e", node).Args, true)
+	if err != nil {
+		return "", err
+	}
+	id := strings.TrimSpace(string(out))
+	if id == "" {
+		return "", fmt.Errorf("empty boot ID on %s", node)
+	}
+	return id, nil
+}
+
+func ExecCmd(cmd Command) error {
+	_, err := executeCommand(cmd)
+	return err
+}
+
+func executeCommand(cmd Command) ([]byte, error) {
+	if cmd.Err != nil {
+		return nil, cmd.Err
+	}
+	if len(cmd.Args) < 2 {
+		return nil, fmt.Errorf("empty Talos command")
+	}
+	var err error
+	cmd, err = resolveControlPlane(cmd)
+	if err != nil {
+		return nil, err
+	}
+	deadline := time.Now().Add(15 * time.Minute)
 	for {
-		out, err := fthelper.RunCommand(args, false)
+		out, err := runCommand(cmd.Args, false)
 		if err == nil {
-			return nil
+			return out, nil
 		}
-		if !strings.Contains(cmd, " bootstrap ") || !strings.Contains(string(out), "bootstrap is not available yet") {
-			return fmt.Errorf("Talos command failed: %w: %s", err, strings.TrimSpace(string(out)))
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("bootstrap is still unavailable: Talos may still be installing or installation may have failed; inspect talosctl dmesg and get disks, then check provisioning.diskSelector.match: %w: %s", err, strings.TrimSpace(string(out)))
+		if cmd.Args[1] != "bootstrap" || !strings.Contains(string(out), "bootstrap is not available yet") || time.Now().After(deadline) {
+			return out, fmt.Errorf("node %s, %s: %w: %s", cmd.Node, cmd.Args[1], err, strings.TrimSpace(string(out)))
 		}
 		time.Sleep(5 * time.Second)
 	}
 }
 
-func ExecCmds(taloscmds []string, healthcheck bool) error {
-	log.Info().Msg("Regenerating config prior to commands...")
-	if err := GenConfig([]string{}); err != nil {
-		return err
+func resolveControlPlane(cmd Command) (Command, error) {
+	if !cmd.Failover {
+		return cmd, nil
 	}
-	if len(taloscmds) == 0 {
+	inv, err := talosconfig.LoadInventory()
+	if err != nil {
+		return cmd, err
+	}
+	address, err := ExistingControlPlane(inv)
+	if err != nil {
+		return cmd, err
+	}
+	cmd.Args = append([]string{}, cmd.Args...)
+	for i := 0; i+1 < len(cmd.Args); i++ {
+		if cmd.Args[i] == "-n" {
+			cmd.Args[i+1] = address
+		}
+	}
+	cmd.Node = address
+	return cmd, nil
+}
+
+// Execute the already validated snapshot. Never regenerate during execution.
+func ExecCmds(commands []Command, healthcheck bool) error {
+	if len(commands) == 0 {
 		return fmt.Errorf("no node commands generated")
 	}
-	var todocmds []string
-	var healthcmd string
-	skipped := false
-	if healthcheck {
-		log.Info().Msg("Pre-Run Healthchecks...")
-
-		for _, command := range taloscmds {
-
-			node := helper.ExtractNode(command)
-			log.Info().Msgf("checking node availability:  %v", node)
-			err := nodestatus.CheckHealth(node, "", false)
-			if err != nil {
-				log.Info().Msgf("node seems not to be runnign correctly and cannot be used %v", node)
-				log.Info().Msgf("node This will also make it impossible to poll total-cluster-health as well... %v", node)
-				if !fthelper.GetYesOrNo("Do you want to continue without this node? (yes/no) [y/n]: ", false) {
-					log.Info().Msg("Exiting...")
-					return fmt.Errorf("Talos operation stopped")
-				} else {
-					skipped = true
-					continue
-				}
-			}
-			todocmds = append(todocmds, command)
+	for _, cmd := range commands {
+		if cmd.Err != nil {
+			return cmd.Err
 		}
-		if skipped {
-			log.Info().Msg("skipping cluster health check due to unhealthy nodes being ignored...")
-		} else {
-			if fthelper.GetYesOrNo("Do you want to check the health of the cluster? (yes/no) [y/n]: ", false) {
-				log.Info().Msg("Checking if cluster is healthy...")
-				healthcmds := GenPlain("health", helper.TalEnv["VIP_IP"], []string{})
-				if len(healthcmds) > 0 {
-					healthcmd = healthcmds[0]
-					if err := ExecCmd(healthcmd); err != nil {
-						return err
+	}
+	commands, cleanup, err := freezeCommands(commands)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	for index, cmd := range commands {
+		if len(cmd.Args) < 2 {
+			return fmt.Errorf("empty Talos command")
+		}
+		operation := cmd.Args[1]
+		var bootID string
+		disruptive := operation == "apply-config" || operation == "upgrade" || operation == "reset"
+		if disruptive {
+			stage, err := checkStatus(cmd.Node)
+			if err != nil {
+				return fmt.Errorf("node %s preflight (%d completed, %d pending): %w", cmd.Node, index, len(commands)-index, err)
+			}
+			if stage == "maintenance" {
+				if operation != "apply-config" {
+					return fmt.Errorf("node %s is in maintenance; apply its configuration first", cmd.Node)
+				}
+				// Maintenance uses a direct endpoint. Never ask another configured endpoint
+				// to proxy an unauthenticated request to an unconfigured node.
+				cmd.Args = append(append([]string{}, cmd.Args...), "-e", cmd.Node, "--insecure")
+			} else if healthcheck {
+				if err := waitReady(cmd.Node); err != nil {
+					return fmt.Errorf("node %s preflight: %w", cmd.Node, err)
+				}
+				if operation == "apply-config" {
+					bootID, err = readBootID(cmd.Node)
+					if err != nil {
+						return fmt.Errorf("node %s boot identity: %w", cmd.Node, err)
 					}
 				}
-			} else {
-				skipped = true
+				if operation != "reset" {
+					canReboot, err := guardControlPlane(cmd.Node)
+					if err != nil {
+						return fmt.Errorf("node %s control-plane preflight: %w", cmd.Node, err)
+					}
+					if !canReboot {
+						if operation != "apply-config" {
+							return fmt.Errorf("node %s: reboot would lose etcd quorum; add a third healthy control plane before rolling upgrades", cmd.Node)
+						}
+						cmd.Args = append(append([]string{}, cmd.Args...), "--mode=no-reboot")
+					}
+				}
 			}
 		}
-	} else {
-		todocmds = taloscmds
-	}
-
-	log.Info().Msg("Executing Cmds...")
-	if len(todocmds) == 0 {
-		return fmt.Errorf("no healthy configured node available; operation was not performed")
-	}
-	for _, command := range todocmds {
-		node := helper.ExtractNode(command)
-		log.Info().Msgf("Executing commands on node:  %v", node)
-		argslice := strings.Split(string(command), " ")
-		// log.Info().Msg("test", strings.Join(argslice, " "))
-		log.Debug().Msgf("running command: %s", command)
-		out, err := fthelper.RunCommand(argslice, false)
+		out, err := executeCommand(cmd)
 		if err != nil {
-			if strings.Contains(command, " apply-config ") && strings.Contains(string(out), "certificate signed by unknown authority") {
-				if err := nodestatus.CheckHealth(node, "maintenance", false); err != nil {
-					return err
-				}
-				argslice = append(argslice, "--insecure")
-				log.Debug().Msgf("Re-Running command using insecure flag: %s", command)
-				_, err2 := fthelper.RunCommand(argslice, false)
-				if err2 != nil {
-					return fmt.Errorf("maintenance apply failed: %w", err2)
-				}
-			} else {
-				return fmt.Errorf("Talos operation failed: %w: %s", err, strings.TrimSpace(string(out)))
-			}
-
+			return fmt.Errorf("%d completed; stopped with %d pending: %w", index, len(commands)-index-1, err)
 		}
-		time.Sleep(15 * time.Second)
-
-		if healthcheck {
-			log.Info().Msgf("checking if node is back online:  %v", node)
-			err := nodestatus.CheckHealth(node, "", false)
-			if err != nil {
-				log.Info().Msgf("node seems not to be running correctly... %v", node)
-				if !fthelper.GetYesOrNo("Are you sure you want to continue applying this to other nodes? (yes/no) [y/n]: ", false) {
-					log.Info().Msg("Exiting...")
-					return fmt.Errorf("Talos operation stopped")
+		if healthcheck && disruptive && operation != "reset" {
+			if bootID != "" && strings.Contains(strings.ToLower(string(out)), "with a reboot") {
+				deadline := time.Now().Add(15 * time.Minute)
+				for {
+					current, err := readBootID(cmd.Node)
+					if err == nil && current != bootID {
+						break
+					}
+					if time.Now().After(deadline) {
+						return fmt.Errorf("node %s did not complete its requested reboot", cmd.Node)
+					}
+					recoveryDelay()
 				}
 			}
-		}
-	}
-
-	if healthcheck && !skipped && healthcmd != "" && !strings.Contains(taloscmds[0], "upgrade") {
-		log.Info().Msg("Checking if cluster is healthy after commands...")
-		if err := ExecCmd(healthcmd); err != nil {
-			return err
+			if err := waitReady(cmd.Node); err != nil {
+				return fmt.Errorf("node %s recovery; %d pending: %w", cmd.Node, len(commands)-index-1, err)
+			}
+			if _, err := guardControlPlane(cmd.Node); err != nil {
+				return fmt.Errorf("node %s membership after recovery: %w", cmd.Node, err)
+			}
 		}
 	}
 	return nil
 }
-

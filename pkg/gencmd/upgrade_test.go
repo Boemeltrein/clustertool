@@ -17,24 +17,24 @@ func TestGenKubeUpgrade(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(helper.TalosGenerated, "controlplane.yaml"), []byte("machine:\n  kubelet:\n    image: ghcr.io/siderolabs/kubelet:v1.37.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	node := "10.1.2.3"
+	node := "10.0.0.1"
 	cmd, err := GenKubeUpgrade(node)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(cmd, "--to 1.37.0") {
+	if !strings.Contains(cmd.String(), "--to 1.37.0") {
 		t.Fatalf("Kubernetes version missing: %s", cmd)
 	}
 
-	if !strings.Contains(cmd, " upgrade-k8s ") {
+	if !strings.Contains(cmd.String(), " upgrade-k8s ") {
 		t.Fatalf("expected upgrade-k8s in command, got %q", cmd)
 	}
 
-	if !strings.Contains(cmd, "--talosconfig "+filepath.Join(helper.TalosGenerated, "talosconfig")) {
+	if !strings.Contains(cmd.String(), "--talosconfig "+filepath.Join(helper.TalosGenerated, "talosconfig")) {
 		t.Fatalf("expected talosconfig path in command, got %q", cmd)
 	}
 
-	if !strings.Contains(cmd, " -n "+node) {
+	if !strings.Contains(cmd.String(), " -n "+node) {
 		t.Fatalf("expected node argument in command, got %q", cmd)
 	}
 }
@@ -52,7 +52,7 @@ func TestUpgradeKeepsConfiguredSchematic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(commands[0], "--image "+image) || !strings.Contains(commands[0], "--wait") {
+	if !strings.Contains(commands[0].String(), "--image "+image) || !strings.Contains(commands[0].String(), "--wait") {
 		t.Fatal(commands)
 	}
 	if _, err := GenUpgrade("10.0.0.2", nil); err == nil {
@@ -62,4 +62,3 @@ func TestUpgradeKeepsConfiguredSchematic(t *testing.T) {
 		t.Fatal("accepted an installer override")
 	}
 }
-

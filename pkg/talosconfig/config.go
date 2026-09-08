@@ -169,6 +169,9 @@ func renderPatchDirs(workDir string, dirs []string, requireNonempty bool) ([]str
 	var sourceFiles []string
 	for _, relative := range dirs {
 		dir := filepath.Join(helper.TalosPath, relative)
+		if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("symlink patch directory is not supported: %s", dir)
+		}
 		entries, err := os.ReadDir(dir)
 		if os.IsNotExist(err) && !requireNonempty && (relative == "worker" || relative == "control-plane") {
 			continue
@@ -182,6 +185,9 @@ func renderPatchDirs(workDir string, dirs []string, requireNonempty bool) ([]str
 		count := 0
 		for _, entry := range entries {
 			if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
+				if entry.Type()&os.ModeSymlink != 0 {
+					return nil, fmt.Errorf("symlink patch is not supported: %s", filepath.Join(dir, entry.Name()))
+				}
 				sourceFiles = append(sourceFiles, filepath.Join(dir, entry.Name()))
 				count++
 			}
@@ -228,4 +234,3 @@ func runTalosctl(args ...string) error {
 	}
 	return nil
 }
-

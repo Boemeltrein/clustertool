@@ -2,6 +2,7 @@ package talosconfig
 
 import (
 	"fmt"
+	"io"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -32,6 +33,11 @@ var nodeName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
 func LoadInventory() (*Inventory, error) {
 	data, err := os.ReadFile(filepath.Join(helper.TalosPath, "inventory.yaml"))
 	if os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(helper.TalosPath, "nodes")); err == nil {
+			return nil, fmt.Errorf("nodes/ exists without inventory.yaml; finish the inventory migration instead of falling back to MASTER1IP")
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
 		address := helper.TalEnv["MASTER1IP_IP"]
 		if address == "" {
 			return nil, fmt.Errorf("inventory.yaml or MASTER1IP is required")
@@ -57,12 +63,16 @@ func LoadInventory() (*Inventory, error) {
 	if err := dec.Decode(&inv); err != nil {
 		return nil, fmt.Errorf("read inventory: %w", err)
 	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return nil, fmt.Errorf("inventory must contain exactly one YAML document")
+	}
 	if inv.Version != 1 || len(inv.Nodes) == 0 {
 		return nil, fmt.Errorf("inventory requires version: 1 and at least one node")
 	}
 	names, addresses := map[string]bool{}, map[string]bool{}
 	bootstrap := false
-	for _, n := range inv.Nodes {
+	for index, n := range inv.Nodes {
 		if !nodeName.MatchString(n.Name) || n.Name == "all" || names[n.Name] {
 			return nil, fmt.Errorf("invalid or duplicate node name %q", n.Name)
 		}
@@ -74,6 +84,7 @@ func LoadInventory() (*Inventory, error) {
 			return nil, fmt.Errorf("node %s: invalid or duplicate management IP %q", n.Name, n.Address)
 		}
 		names[n.Name], addresses[ip.String()] = true, true
+		inv.Nodes[index].Address = ip.String()
 		if n.Name == inv.BootstrapNode && n.Role == "control-plane" {
 			bootstrap = true
 		}
@@ -96,6 +107,9 @@ func LoadInventory() (*Inventory, error) {
 }
 
 func (i *Inventory) Select(target string) ([]Node, error) {
+	if ip, err := netip.ParseAddr(target); err == nil {
+		target = ip.String()
+	}
 	if target == "" || target == "all" {
 		return i.Nodes, nil
 	}

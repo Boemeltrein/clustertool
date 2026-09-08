@@ -120,7 +120,7 @@ jobs:
           run_cmd "Check clusterenv exists" test -f clusters/main/clusterenv.yaml
           run_cmd "Check Talos secrets exist" test -f clusters/main/talos/secrets.sops.yaml
           run_cmd "Check talosconfig exists" test -f clusters/main/talos/generated/talosconfig
-          run_cmd "Check control-plane config exists" test -f clusters/main/talos/generated/controlplane.yaml
+          run_cmd "Check control-plane config exists" test -f clusters/main/talos/generated/control-1.yaml
           run_cmd "Check clustersettings secret exists" test -f clusters/main/kubernetes/flux-system/flux/clustersettings.secret.yaml
           run_cmd "Check at least one node machine config exists" bash -c 'find clusters/main/talos/generated -maxdepth 1 -type f -name "*.yaml" ! -name "talsecret.yaml" | grep -q .'
 

@@ -23,7 +23,7 @@ func multiFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	install, err := os.ReadFile(filepath.Join(helper.TalosPath, "nodes", "control-1", "00-install.yaml"))
+	install, err := os.ReadFile(filepath.Join(helper.TalosPath, "all", "00-install.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,6 +40,8 @@ func multiFixture(t *testing.T) {
 		image = image[:start] + fmt.Sprintf("    match: disk.dev_path == '/dev/sd%c'", 'a'+index) + image[end:]
 		write("nodes/"+name+"/00-install.yaml", image)
 		write("nodes/"+name+"/10-hostname.yaml", "apiVersion: v1alpha1\nkind: HostnameConfig\nauto: off\nhostname: "+name+"\n")
+		address := []string{"192.0.2.11", "192.0.2.12", "192.0.2.21"}[index]
+		write("nodes/"+name+"/20-network.yaml", "apiVersion: v1alpha1\nkind: LinkConfig\nname: eth0\nup: true\naddresses:\n  - address: "+address+"/24\n")
 		write("nodes/"+name+"/90-label.yaml", "apiVersion: v1alpha1\nkind: KubeNodeConfig\nlabels:\n  clustertool.test/node: "+name+"\n")
 	}
 	write("all/99-label.yaml", "apiVersion: v1alpha1\nkind: KubeNodeConfig\nlabels:\n  clustertool.test/layer: shared\n")
@@ -96,6 +98,13 @@ func TestMultiNodeGenerationIntegration(t *testing.T) {
 			t.Fatal(err)
 		}
 		previous[name] = data
+		if index == 2 {
+			for _, forbidden := range []string{"kind: Layer2VIPConfig", "kind: KubeAPIServerConfig", "kind: KubeTalosAPIAccessConfig", "kind: KubeProxyConfig"} {
+				if strings.Contains(string(data), forbidden) {
+					t.Fatalf("worker inherited %s", forbidden)
+				}
+			}
+		}
 		image, err := GeneratedNodeValue(path, "UnattendedInstallConfig", "installer", "image")
 		if err != nil || !strings.Contains(image, strings.Repeat(fmt.Sprint(index+1), 64)) {
 			t.Fatal(name, image, err)
@@ -116,6 +125,32 @@ func TestMultiNodeGenerationIntegration(t *testing.T) {
 		if err != nil || value != expected {
 			t.Fatal(name, value, err)
 		}
+	}
+	clientConfig, err := os.ReadFile(TalosconfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, address := range []string{"192.0.2.11", "192.0.2.12"} {
+		if !strings.Contains(string(clientConfig), address) {
+			t.Fatalf("missing control-plane endpoint %s", address)
+		}
+	}
+	if strings.Contains(string(clientConfig), "192.0.2.21") {
+		t.Fatal("worker used as client endpoint")
+	}
+	networkPath := filepath.Join(helper.TalosPath, "nodes", "worker-1", "20-network.yaml")
+	network, err := os.ReadFile(networkPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(networkPath, bytes.ReplaceAll(network, []byte("192.0.2.21"), []byte("192.0.2.99")), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Generate(); err == nil || !strings.Contains(err.Error(), "management address") {
+		t.Fatalf("wrong static IP accepted: %v", err)
+	}
+	if err := os.WriteFile(networkPath, network, 0600); err != nil {
+		t.Fatal(err)
 	}
 	os.WriteFile(filepath.Join(helper.TalosPath, "nodes", "worker-1", "99-invalid.yaml"), []byte("apiVersion: v1alpha1\nkind: UnattendedInstallConfig\nprovisioning:\n  diskSelector:\n    match: unknown.field > 0\n"), 0600)
 	if err := Generate(); err == nil {

@@ -23,6 +23,13 @@ func CheckHealth(node string, status string, silent bool) error {
 	}
 
 	out = strings.TrimSpace(out)
+	if status == "ready" {
+		if out != "running" {
+			return errors.New("node is not running")
+		}
+		_, err := CheckReadyStatus(node, silent)
+		return err
+	}
 	if !silent {
 		log.Info().Msgf("Healthcheck: node currently reporting status:  %v %v", node, out)
 	}
@@ -66,7 +73,7 @@ func WaitForHealth(node string, status []string) (string, error) {
 		}
 	} else {
 		statusmsg = "running"
-		status = []string{""}
+		status = []string{"ready"}
 	}
 
 	log.Info().Msgf("Healthcheck: Waiting for Node %s to reach status: %s", node, statusmsg)
@@ -112,4 +119,3 @@ func WaitForHealth(node string, status []string) (string, error) {
 		}
 	}
 }
-

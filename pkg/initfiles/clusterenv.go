@@ -12,6 +12,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/trueforge-org/clustertool/pkg/helper"
+	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 	fthelper "github.com/trueforge-org/forgetool/v4/pkg/helper"
 )
 
@@ -234,8 +235,6 @@ func CheckEnvVariables() {
 	LoadTalEnv(false)
 	requiredKeys := []string{
 		"VIP",
-		"MASTER1IP_IP",
-		"MASTER1IP_NETMASK",
 		"HEADLAMP_IP",
 		"GATEWAY",
 		"METALLB_RANGE",
@@ -252,20 +251,46 @@ func CheckEnvVariables() {
 		}
 	}
 
-	// Validate VIP and MASTER1IP format and check subnet compatibility
+	inv, err := talosconfig.LoadInventory()
+	if err != nil {
+		log.Error().Err(err).Msg("Invalid node inventory")
+		os.Exit(1)
+	}
+	for _, node := range inv.Nodes {
+		if node.Address == helper.TalEnv["VIP_IP"] || node.Address == helper.TalEnv["GATEWAY"] {
+			log.Error().Msgf("Node %s management address overlaps VIP or gateway", node.Name)
+			os.Exit(1)
+		}
+		inRange, err := fthelper.IPInRange(node.Address, helper.TalEnv["METALLB_RANGE"])
+		if err != nil || inRange {
+			log.Error().Err(err).Msgf("Node %s management address conflicts with METALLB_RANGE", node.Name)
+			os.Exit(1)
+		}
+		for _, network := range []string{"PODNET", "SVCNET"} {
+			_, prefix, err := net.ParseCIDR(helper.TalEnv[network])
+			if err != nil || prefix.Contains(net.ParseIP(node.Address)) {
+				log.Error().Err(err).Msgf("Node %s management address conflicts with %s", node.Name, network)
+				os.Exit(1)
+			}
+		}
+	}
+	// Retain the shared-network checks using the inventory bootstrap address.
 	vip := helper.TalEnv["VIP_IP"]
-	master1ip := helper.TalEnv["MASTER1IP_IP"]
-	master1ipCidr := helper.TalEnv["MASTER1IP_CIDR"]
+	bootstrapIP := inv.Bootstrap().Address
+	bootstrapCIDR := bootstrapIP + "/32"
+	if strings.Contains(bootstrapIP, ":") {
+		bootstrapCIDR = bootstrapIP + "/128"
+	}
 	gateway := helper.TalEnv["GATEWAY"]
 
-	// Check if MASTER1IP matches GATEWAY or VIP
-	if master1ip == gateway || master1ip == vip {
-		log.Info().Msg("Cannot proceed, MASTER1IP cannot match GATEWAY or VIP")
+	// Check if bootstrap node matches GATEWAY or VIP
+	if bootstrapIP == gateway || bootstrapIP == vip {
+		log.Info().Msg("Cannot proceed, bootstrap node cannot match GATEWAY or VIP")
 		os.Exit(1)
 	}
 
 	// Check if VIP matches any Node IPs
-	if vip == master1ip {
+	if vip == bootstrapIP {
 		log.Info().Msg("Cannot proceed, VIP cannot match any Node IPs")
 		os.Exit(1)
 	}
@@ -281,13 +306,13 @@ func CheckEnvVariables() {
 		os.Exit(1)
 	}
 
-	inRange, err = fthelper.IPInRange(master1ip, helper.TalEnv["METALLB_RANGE"])
+	inRange, err = fthelper.IPInRange(bootstrapIP, helper.TalEnv["METALLB_RANGE"])
 	if err != nil {
-		log.Info().Msgf("Error checking MASTER1IP against METALLB_RANGE: %v\n", err)
+		log.Info().Msgf("Error checking bootstrap node against METALLB_RANGE: %v\n", err)
 		os.Exit(1)
 	}
 	if inRange {
-		log.Info().Msg("Cannot proceed, MASTER1IP cannot be in the METALLB_RANGE")
+		log.Info().Msg("Cannot proceed, bootstrap node cannot be in the METALLB_RANGE")
 		os.Exit(1)
 	}
 
@@ -316,12 +341,12 @@ func CheckEnvVariables() {
 
 	// Validate other CIDR/IP checks with new netmask support
 	fthelper.ValidateIPorCIDRNotInCIDR(vip+"/32", helper.TalEnv["PODNET"], "VIP", "PODNET")
-	fthelper.ValidateIPorCIDRNotInCIDR(master1ipCidr, helper.TalEnv["PODNET"], "MASTER1IP", "PODNET")
+	fthelper.ValidateIPorCIDRNotInCIDR(bootstrapCIDR, helper.TalEnv["PODNET"], "bootstrap node", "PODNET")
 	fthelper.ValidateIPorCIDRNotInCIDR(gateway+"/32", helper.TalEnv["PODNET"], "GATEWAY", "PODNET")
 	fthelper.ValidateRangeNotInCIDR(helper.TalEnv["METALLB_RANGE"], helper.TalEnv["PODNET"], "METALLB_RANGE", "PODNET")
 
 	fthelper.ValidateIPorCIDRNotInCIDR(vip+"/32", helper.TalEnv["SVCNET"], "VIP", "SVCNET")
-	fthelper.ValidateIPorCIDRNotInCIDR(master1ipCidr, helper.TalEnv["SVCNET"], "MASTER1IP", "SVCNET")
+	fthelper.ValidateIPorCIDRNotInCIDR(bootstrapCIDR, helper.TalEnv["SVCNET"], "bootstrap node", "SVCNET")
 	fthelper.ValidateIPorCIDRNotInCIDR(gateway+"/32", helper.TalEnv["SVCNET"], "GATEWAY", "SVCNET")
 	fthelper.ValidateRangeNotInCIDR(helper.TalEnv["METALLB_RANGE"], helper.TalEnv["SVCNET"], "METALLB_RANGE", "SVCNET")
 }

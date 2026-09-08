@@ -15,15 +15,17 @@ can be extended with additional nodes.
    `clusters/main/talos/control-plane/` and `clusters/main/talos/nodes/`. Run
    `clustertool init` again. It creates `talos/secrets.sops.yaml` once, using
    `talosctl gen secrets`. Repeating init preserves that identity.
-3. Run `clustertool genconfig`. It renders the environment into YAML scalar values,
+3. Run `clustertool genconfig` (also available as `clustertool talos genconfig`). It renders the environment into YAML scalar values,
    generates a base with `talosctl gen config --with-secrets`, applies the loose
    documents with `talosctl machineconfig patch`, and runs `talosctl validate
-   --mode metal`. Only validated output replaces `talos/generated/controlplane.yaml`
-   and `talos/generated/talosconfig`. The client endpoints and nodes use `MASTER1IP`.
+   --mode metal`. Only a fully validated set replaces `talos/generated/<inventory-name>.yaml`
+   and `talos/generated/talosconfig`. Client endpoints include every control-plane
+   management address; the default client node is the inventory bootstrap node.
 4. Review the generated configuration before running `clustertool talos apply`.
-   Apply regenerates and validates first. For a node in maintenance mode, the
-   existing bootstrap prompt starts installation, etcd bootstrap and the existing
-   Kubernetes/Helm/Flux setup. For an installed node it applies the configuration.
+   Apply regenerates and validates all nodes first, then freezes the command inputs.
+   Existing authenticated etcd membership selects the apply/join path, including
+   new workers in maintenance. Only when all control planes report maintenance
+   does the new-cluster confirmation appear. Unknown cluster state stops the command.
 
 For inventory generation, files are loaded in filename order from `all/`, the
 node's role directory and that node's `nodes/<name>/` directory. The legacy
@@ -106,6 +108,75 @@ Each node may use a different Image Factory schematic in its own
 files: it discovers the schematic from each running node when it performs an
 upgrade.
 
+`version: 1` is the inventory format version, not a Talos or Kubernetes version.
+`bootstrapNode` identifies the control plane used to initialize a new cluster;
+it does not make that node a permanent leader. `name` selects the patch directory
+and output filename. The actual node hostname remains in `HostnameConfig`.
+
+When adding another control plane, copy the starter node directory and change
+its hostname, static address and disk/image settings. Its VIP link must match its
+own interface. When adding a worker, also remove `Layer2VIPConfig` from the copied
+network file. Generation rejects a worker VIP and a static address that does not
+match its inventory address. Literal management IPs are supported; additional
+`MASTER2IP` or `WORKER1IP` environment variables are not required.
+
+`KubeTalosAPIAccessConfig` and `KubeProxyConfig` belong in the control-plane layer:
+Talos 1.14 rejects them on workers. This corrects the earlier proposal's suggestion
+to copy the API-access document onto every node. The system-upgrade permissions
+remain configured through the control planes; Tuppr discovers each node's live
+schematic independently.
+
+### Applying, resuming and upgrading
+
+`talos apply` and `talos apply all` run sequentially, control planes before workers.
+Name or IP selection targets one node. All configurations validate before execution;
+command inputs are copied into a private temporary snapshot. Failure stops subsequent
+nodes. Maintenance-mode apply uses that node's direct endpoint and insecure API;
+established nodes require authenticated access and readiness.
+
+During initial setup, the bootstrap node is installed first. Cilium and the CSR
+approver are installed before remaining nodes join. Other charts and Flux follow.
+An identity-bound `.bootstrap-in-progress.json` checkpoint allows `talos apply all`
+to resume setup after interruption. Live etcd membership prevents a second bootstrap.
+Already deployed Helm releases are kept; an existing failed/pending release requires
+operator recovery before retrying. The checkpoint is removed after successful setup.
+It contains no credentials and is ignored by the copied Git ignore file.
+
+`talos upgrade [name-or-IP|all]` uses each selected node's installer image, waits for
+recovery, then runs **one cluster-wide Kubernetes upgrade**, even with a single-node
+selector. `--talos-only` skips that Kubernetes phase. Read-only version/readiness and
+Kubernetes dry-run checks run before any Talos upgrades. A requested Talos downgrade
+(for example, stale source after Tuppr upgraded the node) is refused. Kubernetes
+versions must agree across the desired node configurations. If the Kubernetes dry
+run requires newer Talos first, perform the Talos phase with `--talos-only` and retry.
+
+Before control-plane maintenance, live etcd membership must match known generated
+hostnames and every member must be ready. A two-member etcd cluster cannot retain
+quorum during a reboot: apply is restricted to `no-reboot`, and rolling upgrades
+are refused until a third healthy control plane is present. A single-control-plane
+upgrade necessarily causes control-plane downtime. Talos upgrades use the CLI's
+`--wait`; a configuration apply that requests reboot waits for a changed Linux boot
+ID and readiness before proceeding. Cluster health and default kubeconfig retrieval
+select a reachable authenticated control plane.
+
+### Migrating the earlier native single-node layout
+
+Back up the complete existing configuration and credentials securely. Keep
+`secrets.sops.yaml` unchanged. Add an inventory entry with the existing management
+address and create its `nodes/<name>/` directory. Move the existing install,
+hostname and network patches from `all/` into that directory, preserving every
+value. Retain shared settings in `all/` and control-plane settings in the role
+directory. Run genconfig and compare the old and new complete outputs, particularly
+CAs, hostname, IPs, image, disk, mounts, labels and taints, before applying.
+
+`init` refuses an existing Talos layout without an inventory instead of silently
+mixing new templates with the earlier layout. An existing Talhelper `talconfig.yaml`
+must also be migrated explicitly as described below. No arbitrary custom patches
+are translated automatically, and no secrets are regenerated to bypass migration.
+
+See [multinode verification](multinode-validation.md) for offline evidence and the
+remaining live-cluster acceptance procedure.
+
 ## Preserved settings
 
 Values from the previous main-branch template are represented in these loose files.
@@ -121,7 +192,8 @@ migration; init does not translate arbitrary customizations.
 | `eth0`, static address, default gateway, VIP | `nodes/control-1/20-network.yaml` |
 | DNS `1.1.1.1`, `8.8.8.8`; all three hostDNS flags | `all/21-resolver.yaml` |
 | Server certificate rotation, maxPods 250, shutdown 15s/10s, GC 50/30/30m | `all/30-kubelet.yaml` |
-| OpenEBS and Longhorn bind mounts with `bind,rshared,rw`; control-plane scheduling | `all/30-kubelet.yaml` |
+| OpenEBS and Longhorn bind mounts with `bind,rshared,rw` | `all/30-kubelet.yaml` |
+| Control-plane scheduling | `control-plane/30-scheduling.yaml` |
 | All 14 sysctls, Cloudflare NTP and 13 registry mirrors with original endpoint order | `all/40-system.yaml` |
 | `nvme_tcp`, `vfio_pci`, `uio_pci_generic` | `all/41-kernel.yaml` |
 | Containerd `discard_unpacked_layers = false` | `all/42-cri.yaml` |

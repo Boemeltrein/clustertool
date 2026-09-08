@@ -17,28 +17,28 @@ func withSingleNodeFixture(t *testing.T) {
 
 func TestGenPlainUsesSingleConfiguredNode(t *testing.T) {
 	withSingleNodeFixture(t)
-	cmds := GenPlain("health", "", []string{"-f"})
+	cmds := GenPlain("health", "", []string{"--wait-timeout=1m"})
 	if len(cmds) != 1 {
 		t.Fatalf("expected 1 command, got %d", len(cmds))
 	}
-	if !strings.Contains(cmds[0], " -n 10.0.0.1") || !strings.Contains(cmds[0], "--talosconfig "+talosconfig.TalosconfigPath()) {
+	if !strings.Contains(cmds[0].String(), " -n 10.0.0.1") || !strings.Contains(cmds[0].String(), "--talosconfig "+talosconfig.TalosconfigPath()) {
 		t.Fatalf("unexpected command %q", cmds[0])
 	}
-	if !strings.HasSuffix(cmds[0], " -f") {
+	if !strings.HasSuffix(cmds[0].String(), " --wait-timeout=1m") {
 		t.Fatalf("expected extra flag, got %q", cmds[0])
 	}
 }
 
 func TestGenApplySingleNode(t *testing.T) {
 	withSingleNodeFixture(t)
-	cmds := GenApply("", []string{"--insecure"})
+	cmds := GenApply("", []string{"--timeout=1m"})
 	if len(cmds) != 1 {
 		t.Fatalf("expected 1 command, got %d", len(cmds))
 	}
-	if !strings.Contains(cmds[0], " apply-config ") || !strings.Contains(cmds[0], " -f "+talosconfig.ControlPlanePath()) {
+	if !strings.Contains(cmds[0].String(), " apply-config ") || !strings.Contains(cmds[0].String(), " -f "+talosconfig.ControlPlanePath()) {
 		t.Fatalf("unexpected command %q", cmds[0])
 	}
-	if !strings.Contains(cmds[0], " -n 10.0.0.1") || !strings.HasSuffix(cmds[0], " --insecure") {
+	if !strings.Contains(cmds[0].String(), " -n 10.0.0.1") || !strings.HasSuffix(cmds[0].String(), " --timeout=1m") {
 		t.Fatalf("unexpected node or flags in %q", cmds[0])
 	}
 }
