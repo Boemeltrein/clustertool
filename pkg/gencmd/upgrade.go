@@ -26,7 +26,6 @@ func GenUpgrade(target string, extra []string) ([]Command, error) {
 		}
 		args := append([]string{"--wait", "--image", image}, extra...)
 		command := nodeCommand("upgrade", node, args...)
-		command.Snapshot = true
 		commands = append(commands, command)
 	}
 	return commands, nil

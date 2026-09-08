@@ -11,7 +11,7 @@ audit. Offline passing tests do not establish successful live HA upgrades.
 | Apply routing | Inventory name/IP selection replaces the hard-coded first-node bootstrap decision. A new worker joins an authenticated existing cluster. |
 | Commands | Argument arrays preserve paths with spaces. Forwarded flags cannot change the validated node, input, image or authentication mode. |
 | Generation | Every node validates before publication; failed worker generation retains the old output and secrets. Static management IP and worker role/VIP consistency are checked. |
-| Execution | Inputs are frozen before node operations, with no mid-execution regeneration. Execution stops on command/readiness failure. |
+| Execution | Commands use generated files directly, with no mid-execution regeneration. Execution stops on command/readiness failure. |
 | Readiness | `ready: false` is an error. Established apply waits for reboot identity changes when a reboot is reported; upgrade uses Talos `--wait`. |
 | Bootstrap | CNI/CSR installation precedes joins. An identity-bound checkpoint permits explicit initial setup to resume; live etcd evidence prevents a duplicate bootstrap. Chart errors propagate. |
 | Upgrade | Per-node image/schematic is retained; obsolete `--preserve` is removed. Version and quorum checks precede mutation. Kubernetes runs once, with an initial dry run; `--talos-only` skips it. |
@@ -42,7 +42,7 @@ documents, client endpoint selection and preservation of previous outputs.
 Execution tests use mocked nodes and processes, not a networked cluster. They cover
 argument boundaries, maintenance endpoints, failure stopping, readiness recovery,
 reboot identity changes, two-member quorum protection, downgrade rejection,
-bootstrap-state decisions, checkpoint identity binding and frozen input retention.
+bootstrap-state decisions, checkpoint identity binding.
 
 The Linux amd64 PR workflow runs the tests with the embedded Talos version before
 packaging the test archive. Its successful run and commit SHA must be checked

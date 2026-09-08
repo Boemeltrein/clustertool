@@ -18,7 +18,6 @@ func GenApply(target string, extra []string) []Command {
 	for _, node := range nodes {
 		args := append([]string{"-f", talosconfig.NodeConfigPath(node)}, extra...)
 		command := nodeCommand("apply-config", node, args...)
-		command.Snapshot = true
 		commands = append(commands, command)
 	}
 	return commands

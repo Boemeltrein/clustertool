@@ -36,22 +36,22 @@ func RunBootstrap(args []string) error {
 		return err
 	}
 	bootstrapNode := inv.Bootstrap().Address
-	applyCommands, cleanup, err := freezeCommands(GenApply("", extraArgs))
-	if err != nil {
-		return err
+	applyCommands := GenApply("", extraArgs)
+	for _, command := range applyCommands {
+		if command.Err != nil {
+			return command.Err
+		}
 	}
-	defer cleanup()
 	applyNode := func(address string) error {
 		for _, command := range applyCommands {
 			if command.Err != nil {
 				return command.Err
 			}
 			if command.Node == address {
-				command.Snapshot = false
 				return ExecCmds([]Command{command}, false)
 			}
 		}
-		return fmt.Errorf("node %s missing from bootstrap snapshot", address)
+		return fmt.Errorf("node %s missing from bootstrap command plan", address)
 	}
 	if err := beginBootstrap(); err != nil {
 		return err

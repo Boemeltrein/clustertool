@@ -22,7 +22,7 @@ can be extended with additional nodes.
    and `talos/generated/talosconfig`. Client endpoints include every control-plane
    management address; the default client node is the inventory bootstrap node.
 4. Review the generated configuration before running `clustertool talos apply`.
-   Apply regenerates and validates all nodes first, then freezes the command inputs.
+   Apply regenerates and validates all nodes first, then uses the files in `generated/` directly.
    Existing authenticated etcd membership selects the apply/join path, including
    new workers in maintenance. Only when all control planes report maintenance
    does the new-cluster confirmation appear. Unknown cluster state stops the command.
@@ -130,7 +130,7 @@ schematic independently.
 
 `talos apply` and `talos apply all` run sequentially, control planes before workers.
 Name or IP selection targets one node. All configurations validate before execution;
-command inputs are copied into a private temporary snapshot. Failure stops subsequent
+commands use the files in `generated/` directly. Failure stops subsequent
 nodes. Maintenance-mode apply uses that node's direct endpoint and insecure API;
 established nodes require authenticated access and readiness.
 

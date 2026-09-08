@@ -12,7 +12,6 @@ type Command struct {
 	Node     string
 	Err      error
 	Failover bool
-	Snapshot bool
 }
 
 func (c Command) String() string { return strings.Join(c.Args, " ") }

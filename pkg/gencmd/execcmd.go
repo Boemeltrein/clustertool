@@ -86,7 +86,7 @@ func resolveControlPlane(cmd Command) (Command, error) {
 	return cmd, nil
 }
 
-// Execute the already validated snapshot. Never regenerate during execution.
+// Execute the already validated generated files. Never regenerate during execution.
 func ExecCmds(commands []Command, healthcheck bool) error {
 	if len(commands) == 0 {
 		return fmt.Errorf("no node commands generated")
@@ -96,11 +96,6 @@ func ExecCmds(commands []Command, healthcheck bool) error {
 			return cmd.Err
 		}
 	}
-	commands, cleanup, err := freezeCommands(commands)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
 	for index, cmd := range commands {
 		if len(cmd.Args) < 2 {
 			return fmt.Errorf("empty Talos command")
