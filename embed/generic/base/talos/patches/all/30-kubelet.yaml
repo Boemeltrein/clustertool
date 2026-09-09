@@ -1,5 +1,9 @@
-# Talos 1.14 KubeletConfig cannot represent extraMounts. Keep this official
-# legacy block until Talos provides an equivalent; never drop the storage mounts.
+# Keep machine.kubelet: Talos 1.14 KubeletConfig does not support extraMounts.
+# These bind mounts expose the existing storage directories to kubelet.
+# The new multi-document alternative, UserVolumeConfig, uses /var/mnt/<name>.
+# Switching requires updating storage paths and moving existing data,
+# not just replacing this configuration.
+# https://longhorn.io/docs/1.12.1/advanced-resources/os-distro-specific/talos-linux-support/#from-talos-linux-v110x-onwards
 machine:
   kubelet:
     image: ghcr.io/siderolabs/kubelet:v1.37.0
@@ -25,3 +29,14 @@ machine:
 apiVersion: v1alpha1
 kind: KubeletConfig
 $patch: delete
+##==========Example KubeletConfig for Talos 1.14 and later==========
+# apiVersion: v1alpha1
+# kind: KubeletConfig
+# config:
+#   crashLoopBackOff:
+#     maxContainerRestartPeriod: 60s
+#   imageMaximumGCAge: 168h
+#   maxParallelImagePulls: 3
+#   serializeImagePulls: false
+#   shutdownGracePeriod: 90s
+#   shutdownGracePeriodCriticalPods: 60s

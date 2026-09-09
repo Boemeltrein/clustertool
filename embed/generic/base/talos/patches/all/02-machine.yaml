@@ -1,5 +1,0 @@
-# Preserve the existing Talos API certificate SANs.
-machine:
-  certSANs:
-    - 127.0.0.1
-    - ${VIP}

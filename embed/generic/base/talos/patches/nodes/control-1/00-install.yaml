@@ -18,5 +18,4 @@ provisioning:
   diskSelector:
     # Exclude loop devices and installation media. Refine this to the intended
     # disk's serial or dev_path when more than one writable disk matches.
-    match: disk.size <= 1600u * GB && disk.transport != "" && !disk.readonly && !disk.cdrom && !disk.dev_path.startsWith("/dev/loop")
-  wipe: false
+    match: disk.size <= 2000u * GB && disk.transport != "" && !disk.readonly && !disk.cdrom && !disk.dev_path.startsWith("/dev/loop")

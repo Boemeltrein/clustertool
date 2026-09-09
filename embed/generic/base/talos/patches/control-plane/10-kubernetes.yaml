@@ -29,26 +29,23 @@ config:
   apiVersion: kubescheduler.config.k8s.io/v1
   kind: KubeSchedulerConfiguration
   profiles:
-    - pluginConfig:
-        - args:
+    - schedulerName: default-scheduler
+      pluginConfig:
+        - name: PodTopologySpread
+          args:
+            defaultingType: List
             defaultConstraints:
               - maxSkew: 1
                 topologyKey: kubernetes.io/hostname
                 whenUnsatisfiable: ScheduleAnyway
-            defaultingType: List
-          name: PodTopologySpread
       plugins:
         score:
           disabled:
-            - name: ImageLocality
-      schedulerName: default-scheduler
+            - name: ImageLocality     
 ---
 apiVersion: v1alpha1
 kind: KubeProxyConfig
-image: registry.k8s.io/kube-proxy:v1.37.0
 enabled: false
-config:
-  metricsBindAddress: 0.0.0.0:10249
 ---
 apiVersion: v1alpha1
 kind: KubeFlannelCNIConfig
@@ -62,9 +59,7 @@ configuration:
     namespaces:
       - metallb
       - metallb-config
-      - topolvm-system
       - longhorn-system
-      - kyverno
       - system-upgrade
       - openebs
       - snapshot-controller

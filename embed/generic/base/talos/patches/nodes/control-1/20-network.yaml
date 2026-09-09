@@ -9,5 +9,5 @@ routes:
 ---
 apiVersion: v1alpha1
 kind: Layer2VIPConfig
-link: eth0
 name: ${VIP}
+link: eth0

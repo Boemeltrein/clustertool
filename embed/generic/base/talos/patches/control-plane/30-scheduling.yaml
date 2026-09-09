@@ -1,4 +1,4 @@
-# Preserve scheduling on control-plane nodes without applying this to workers.
+# Allow scheduling on control-plane nodes
 apiVersion: v1alpha1
 kind: KubeNodeConfig
 taints:
