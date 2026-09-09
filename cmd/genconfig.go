@@ -28,5 +28,4 @@ var genConfig = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(genConfig)
-	talosCmd.AddCommand(&cobra.Command{Use: "genconfig", Short: "Generate and validate all Talos node configurations", RunE: genConfig.RunE})
 }
