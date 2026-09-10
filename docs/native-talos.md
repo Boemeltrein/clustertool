@@ -234,7 +234,7 @@ select a reachable authenticated control plane.
 
 | Previous configuration | New file under `talos/` |
 | --- | --- |
-| Install disk at most 1600 GB; no disk wipe | `patches/nodes/control-1/00-install.yaml` (`disk.size <= 1600u * GB`, excluding loop devices, read-only devices and CD-ROMs) |
+| Install disk at most 1600 GB; no disk wipe | `patches/nodes/control-1/00-install.yaml` (`disk.size <= 2000u * GB`, excluding loop devices, read-only devices and CD-ROMs) |
 | Hostname `k8s-control-1` | `patches/nodes/control-1/01-hostname.yaml` |
 | Machine certificate SANs `127.0.0.1` and VIP | `patches/all/02-machine.yaml` |
 | Cluster pod/service networks | `patches/all/10-cluster.yaml` |
