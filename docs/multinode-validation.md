@@ -39,6 +39,18 @@ patch precedence, and persistent secrets. It also checks invalid-worker rejectio
 wrong static management address rejection, absence of control-plane-only worker
 documents, client endpoint selection and preservation of previous outputs.
 
+The version/storage change additionally verifies non-default central versions
+(Talos v1.14.1 and Kubernetes v1.36.3 for offline generation), all control-plane
+component images, native kubelet images, directory volumes, and each node's disk
+selector. Missing/malformed versions are rejected. A stale TALOS_VERSION in the
+environment neither overrides the configured version nor gets mutated.
+
+The pinned Longhorn 1.12.0 and OpenEBS localpv-provisioner 4.6.0 chart source
+templates were rendered with the HelmRelease values: Longhorn's default settings,
+the OpenEBS StorageClass and the provisioner fallback path use `/var/mnt/`.
+Chart rendering does not prove runtime mounting or data persistence; follow
+[storage acceptance](storage-validation.md) on the operator's test cluster.
+
 Execution tests use mocked nodes and processes, not a networked cluster. They cover
 argument boundaries, maintenance endpoints, failure stopping, readiness recovery,
 reboot identity changes, two-member quorum protection, downgrade rejection,

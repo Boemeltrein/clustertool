@@ -77,7 +77,7 @@ func Generate() error {
 	return generateInventory(inv)
 }
 
-func renderPatchDirs(workDir string, dirs []string) ([]string, error) {
+func renderPatchDirs(workDir string, dirs []string, env map[string]string) ([]string, error) {
 	var sourceFiles []string
 	for _, relative := range dirs {
 		dir := filepath.Join(helper.TalosPath, "patches", relative)
@@ -110,7 +110,7 @@ func renderPatchDirs(workDir string, dirs []string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		content, err := render(raw, helper.TalEnv)
+		content, err := render(raw, env)
 		if err != nil {
 			return nil, fmt.Errorf("render Talos document %s: %w", source, err)
 		}

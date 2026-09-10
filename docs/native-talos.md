@@ -40,6 +40,10 @@ it is not a Kubernetes resource or a Talos document.
 ```yaml
 apiVersion: clustertool/v1
 kind: ClusterConfig
+# renovate: datasource=github-releases depName=siderolabs/talos
+talosVersion: v1.14.0
+# renovate: datasource=docker depName=ghcr.io/siderolabs/kubelet
+kubernetesVersion: v1.37.0
 bootstrapNode: control-1
 nodes:
   - name: control-1
@@ -60,6 +64,45 @@ permanent leader. `name` selects the patch directory and generated filename;
 the actual hostname is set in that node's `HostnameConfig`.
 Missing files, unsupported format/kind, unknown fields, duplicate names/IPs and
 invalid bootstrap selections stop generation. No environment-only fallback exists.
+
+Both version fields are required: use `vMAJOR.MINOR.PATCH`, optionally followed
+by a prerelease suffix such as `-rc.1`. ClusterTool passes `kubernetesVersion` to
+`talosctl gen config --kubernetes-version`, so generated Kubernetes component
+images share that version. Standard patches do not pin those images separately.
+An explicit image in a custom patch still overrides the generated base.
+
+`${TALOS_VERSION}` in Talos patches is reserved for `talosVersion` from this file;
+an environment variable with the same name cannot override it. The embedded
+`talosctl` version is selected when ClusterTool is built, not by this setting.
+Use versions supported by that CLI and follow Talos/Kubernetes upgrade rules.
+Changing these values and applying configuration does not replace the upgrade
+procedure. Talos upgrades read each node's generated installer image; Kubernetes
+upgrades read the generated native kubelet images and require a common version.
+
+The inherited TrueForge Renovate YAML custom manager recognizes both comments
+above in the embedded scaffold and in initialized cluster repositories.
+
+## Storage and kubelet
+
+`patches/all/31-storage.yaml` declares `longhorn` and `openebs` user volumes with
+`volumeType: directory`. Their paths are `/var/mnt/longhorn` and `/var/mnt/openebs`
+on the existing EPHEMERAL filesystem. They do not allocate partitions, reserve
+space or provide separate capacity limits. Both roles receive these documents.
+Talos propagates user volumes to kubelet; the standard kubelet patch uses native
+`KubeletConfig` without legacy `machine.kubelet.extraMounts`.
+
+The Longhorn HelmRelease sets `defaultSettings.defaultDataPath` to
+`/var/mnt/longhorn`. The OpenEBS HelmRelease sets
+`localpv-provisioner.localpv.basePath` to `/var/mnt/openebs`; its default
+`openebs-hostpath` StorageClass inherits that path. Custom StorageClasses with an
+explicit `BasePath` must use the intended path too. Chart versions are unchanged.
+
+These are defaults for new installations, not a data migration. Existing
+Longhorn disks and OpenEBS PV paths are not relocated by changing Helm values.
+Validate on a fresh test cluster or with explicitly reviewed storage settings
+and new test volumes. See [storage acceptance](storage-validation.md), including
+pod recreation and a node reboot. Live storage behavior is not proven by offline
+configuration validation.
 
 ## Addresses and networking
 
@@ -137,7 +180,7 @@ specify a different `UnattendedInstallConfig.installer.image`:
 
 ```yaml
 installer:
-  image: factory.talos.dev/metal-installer/<schematic-id>:v1.14.0
+  image: factory.talos.dev/metal-installer/<schematic-id>:${TALOS_VERSION}
 ```
 
 Register the desired customization with Image Factory and replace the image's

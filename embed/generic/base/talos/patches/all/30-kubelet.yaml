@@ -1,34 +1,14 @@
-# Keep machine.kubelet: Talos 1.14 KubeletConfig does not support extraMounts.
-# These bind mounts expose the existing storage directories to kubelet.
-# The new multi-document alternative, UserVolumeConfig, uses /var/mnt/<name>.
-# Switching requires updating storage paths and moving existing data,
-# not just replacing this configuration.
-# https://longhorn.io/docs/1.12.1/advanced-resources/os-distro-specific/talos-linux-support/#from-talos-linux-v110x-onwards
-machine:
-  kubelet:
-    image: ghcr.io/siderolabs/kubelet:v1.37.0
-    extraArgs:
-      rotate-server-certificates: "true"
-    extraConfig:
-      maxPods: 250
-      shutdownGracePeriod: 15s
-      shutdownGracePeriodCriticalPods: 10s
-      imageGCHighThresholdPercent: 50
-      imageGCLowThresholdPercent: 30
-      imageMinimumGCAge: "30m"
-    extraMounts:
-      - destination: /var/openebs/local
-        type: bind
-        source: /var/openebs/local
-        options: [bind, rshared, rw]
-      - destination: /var/lib/longhorn
-        type: bind
-        source: /var/lib/longhorn
-        options: [bind, rshared, rw]
----
 apiVersion: v1alpha1
 kind: KubeletConfig
-$patch: delete
+extraArgs:
+  rotate-server-certificates: "true"
+config:
+  maxPods: 250
+  shutdownGracePeriod: 15s
+  shutdownGracePeriodCriticalPods: 10s
+  imageGCHighThresholdPercent: 50
+  imageGCLowThresholdPercent: 30
+  imageMinimumGCAge: "30m"
 ##==========Example KubeletConfig for Talos 1.14 and later==========
 # apiVersion: v1alpha1
 # kind: KubeletConfig
@@ -40,3 +20,5 @@ $patch: delete
 #   serializeImagePulls: false
 #   shutdownGracePeriod: 90s
 #   shutdownGracePeriodCriticalPods: 60s
+
+

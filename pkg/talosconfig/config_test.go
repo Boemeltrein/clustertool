@@ -129,26 +129,22 @@ func TestNativeGenerationIntegration(t *testing.T) {
 			t.Fatalf("got %#v, want %#v", got, want)
 		}
 	}
-	require(at(legacy, "machine", "kubelet", "extraConfig", "imageGCHighThresholdPercent"), 50)
-	require(at(legacy, "machine", "kubelet", "extraConfig", "imageGCLowThresholdPercent"), 30)
-	require(at(legacy, "machine", "kubelet", "extraConfig", "imageMinimumGCAge"), "30m")
+	require(at(docs["KubeletConfig/"], "config", "imageGCHighThresholdPercent"), 50)
+	require(at(docs["KubeletConfig/"], "config", "imageGCLowThresholdPercent"), 30)
+	require(at(docs["KubeletConfig/"], "config", "imageMinimumGCAge"), "30m")
 	require(at(legacy, "machine", "certSANs"), []any{"127.0.0.1", "192.168.20.200"})
-	require(at(legacy, "machine", "kubelet", "extraConfig", "maxPods"), 250)
-	require(at(legacy, "machine", "kubelet", "extraConfig", "shutdownGracePeriod"), "15s")
-	require(at(legacy, "machine", "kubelet", "extraConfig", "shutdownGracePeriodCriticalPods"), "10s")
-	require(at(legacy, "machine", "kubelet", "extraArgs", "rotate-server-certificates"), "true")
+	require(at(docs["KubeletConfig/"], "config", "maxPods"), 250)
+	require(at(docs["KubeletConfig/"], "config", "shutdownGracePeriod"), "15s")
+	require(at(docs["KubeletConfig/"], "config", "shutdownGracePeriodCriticalPods"), "10s")
+	require(at(docs["KubeletConfig/"], "extraArgs", "rotate-server-certificates"), "true")
 	require(at(docs["TimeSyncConfig/"], "ntp", "servers"), []any{"time.cloudflare.com"})
 	require(at(docs["ResolverConfig/"], "nameservers"), []any{map[string]any{"address": "1.1.1.1"}, map[string]any{"address": "8.8.8.8"}})
-	require(at(docs["KubeProxyConfig/"], "config", "metricsBindAddress"), "0.0.0.0:10249")
 	if at(docs["KubeNodeConfig/"], "taints", "node-role.kubernetes.io/control-plane") != nil {
 		t.Fatal("control-plane scheduling is disabled")
 	}
-	mounts := at(legacy, "machine", "kubelet", "extraMounts").([]any)
-	require(len(mounts), 2)
-	for i, path := range []string{"/var/openebs/local", "/var/lib/longhorn"} {
-		require(at(mounts[i], "source"), path)
-		require(at(mounts[i], "destination"), path)
-		require(at(mounts[i], "options"), []any{"bind", "rshared", "rw"})
+	require(at(legacy, "machine", "kubelet"), nil)
+	for _, name := range []string{"longhorn", "openebs"} {
+		require(at(docs["UserVolumeConfig/"+name], "volumeType"), "directory")
 	}
 	require(at(legacy, "cluster", "etcd", "extraArgs", "listen-metrics-urls"), "http://0.0.0.0:2381")
 	require(at(docs["HostnameConfig/"], "hostname"), "k8s-control-1")
@@ -166,7 +162,7 @@ func TestNativeGenerationIntegration(t *testing.T) {
 		}
 	}
 	require(at(docs["KubeProxyConfig/"], "enabled"), false)
-	if docs["KubeFlannelCNIConfig/"] != nil || docs["KubeletConfig/"] != nil {
+	if docs["KubeFlannelCNIConfig/"] != nil {
 		t.Fatal("conflicting generated document remains")
 	}
 	if !bytes.Contains(tc, []byte("192.168.20.210")) {

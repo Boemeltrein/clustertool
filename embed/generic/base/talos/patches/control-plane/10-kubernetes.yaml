@@ -7,7 +7,6 @@ allowedKubernetesNamespaces:
 ---
 apiVersion: v1alpha1
 kind: KubeAPIServerConfig
-image: registry.k8s.io/kube-apiserver:v1.37.0
 certExtraSANs:
   - 127.0.0.1
   - ${VIP}
@@ -16,13 +15,11 @@ extraArgs:
 ---
 apiVersion: v1alpha1
 kind: KubeControllerManagerConfig
-image: registry.k8s.io/kube-controller-manager:v1.37.0
 extraArgs:
   bind-address: 0.0.0.0
 ---
 apiVersion: v1alpha1
 kind: KubeSchedulerConfig
-image: registry.k8s.io/kube-scheduler:v1.37.0
 extraArgs:
   bind-address: 0.0.0.0
 config:
@@ -65,3 +62,4 @@ configuration:
       - snapshot-controller
       - volsync
       - flux-system
+

@@ -25,20 +25,26 @@ func generateInventory(inv *Inventory) error {
 	if strings.Contains(endpoint, ":") {
 		endpoint = "[" + endpoint + "]"
 	}
-	if err = runTalosctl("gen", "config", helper.ClusterName, "https://"+endpoint+":6443", "--with-secrets", SecretsPath(), "--output", work, "--output-types", "controlplane,worker,talosconfig", "--with-docs=false", "--with-examples=false"); err != nil {
+	if err = runTalosctl("gen", "config", helper.ClusterName, "https://"+endpoint+":6443", "--kubernetes-version", strings.TrimPrefix(inv.KubernetesVersion, "v"), "--with-secrets", SecretsPath(), "--output", work, "--output-types", "controlplane,worker,talosconfig", "--with-docs=false", "--with-examples=false"); err != nil {
 		return err
 	}
 	staged := filepath.Join(work, "validated")
 	if err = os.Mkdir(staged, 0700); err != nil {
 		return err
 	}
+	// Keep reserved version substitution local to this generation, not in TalEnv.
+	env := make(map[string]string, len(helper.TalEnv)+1)
+	for key, value := range helper.TalEnv {
+		env[key] = value
+	}
+	env["TALOS_VERSION"] = inv.TalosVersion
 	names := map[string]bool{}
 	for _, node := range inv.Nodes {
 		nodeWork := filepath.Join(work, node.Name+"-patches")
 		if err = os.Mkdir(nodeWork, 0700); err != nil {
 			return err
 		}
-		patches, err := renderPatchDirs(nodeWork, []string{"all", node.Role, filepath.Join("nodes", node.Name)})
+		patches, err := renderPatchDirs(nodeWork, []string{"all", node.Role, filepath.Join("nodes", node.Name)}, env)
 		if err != nil {
 			return fmt.Errorf("node %s: %w", node.Name, err)
 		}

@@ -14,7 +14,7 @@ func TestGenKubeUpgrade(t *testing.T) {
 	previous := helper.TalosGenerated
 	helper.TalosGenerated = t.TempDir()
 	t.Cleanup(func() { helper.TalosGenerated = previous })
-	if err := os.WriteFile(filepath.Join(helper.TalosGenerated, "control-1.yaml"), []byte("machine:\n  kubelet:\n    image: ghcr.io/siderolabs/kubelet:v1.37.0\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(helper.TalosGenerated, "control-1.yaml"), []byte("apiVersion: v1alpha1\nkind: KubeletConfig\nimage: ghcr.io/siderolabs/kubelet:v1.37.0\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	node := "10.0.0.1"

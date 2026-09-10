@@ -27,7 +27,7 @@ func multiFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	write("clustertool.yaml", "apiVersion: clustertool/v1\nkind: ClusterConfig\nbootstrapNode: control-1\nnodes:\n  - {name: control-1, role: control-plane, address: 192.0.2.11}\n  - {name: control-2, role: control-plane, address: 192.0.2.12}\n  - {name: worker-1, role: worker, address: 192.0.2.21}\n")
+	write("clustertool.yaml", "apiVersion: clustertool/v1\nkind: ClusterConfig\ntalosVersion: v1.14.0\nkubernetesVersion: v1.37.0\nbootstrapNode: control-1\nnodes:\n  - {name: control-1, role: control-plane, address: 192.0.2.11}\n  - {name: control-2, role: control-plane, address: 192.0.2.12}\n  - {name: worker-1, role: worker, address: 192.0.2.21}\n")
 	for index, name := range []string{"control-1", "control-2", "worker-1"} {
 		// Synthetic schematic hashes are used only for offline generation, never for image pulls.
 		id := strings.Repeat(fmt.Sprint(index+1), 64)
@@ -36,7 +36,7 @@ func multiFixture(t *testing.T) {
 		end := strings.Index(image[start:], "\n") + start
 		image = image[:start] + fmt.Sprintf("    match: disk.dev_path == '/dev/sd%c'", 'a'+index) + image[end:]
 		write("patches/nodes/"+name+"/00-install.yaml", image)
-		write("patches/nodes/"+name+"/01-hostname.yaml", "apiVersion: v1alpha1\nkind: HostnameConfig\nauto: off\nhostname: "+name+"\n")
+		write("patches/nodes/"+name+"/10-hostname.yaml", "apiVersion: v1alpha1\nkind: HostnameConfig\nauto: off\nhostname: "+name+"\n")
 		address := []string{"192.0.2.11", "192.0.2.12", "192.0.2.21"}[index]
 		write("patches/nodes/"+name+"/20-network.yaml", "apiVersion: v1alpha1\nkind: LinkConfig\nname: eth0\nup: true\naddresses:\n  - address: "+address+"/24\n")
 		write("patches/nodes/"+name+"/90-label.yaml", "apiVersion: v1alpha1\nkind: KubeNodeConfig\nlabels:\n  clustertool.test/node: "+name+"\n")
@@ -80,6 +80,19 @@ func TestMultiNodeGenerationIntegration(t *testing.T) {
 		t.Skip("requires real talosctl")
 	}
 	multiFixture(t)
+	// Use non-default versions to prove CLI propagation, not merely defaults.
+	configPath := filepath.Join(helper.TalosPath, "clustertool.yaml")
+	source, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source = bytes.ReplaceAll(source, []byte("v1.37.0"), []byte("v1.36.3"))
+	source = bytes.ReplaceAll(source, []byte("v1.14.0"), []byte("v1.14.1"))
+	if err := os.WriteFile(configPath, source, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// A stale environment value must not override clustertool.yaml.
+	helper.TalEnv["TALOS_VERSION"] = "v1.13.0"
 	if err := EnsureSecrets(); err != nil {
 		t.Fatal(err)
 	}
@@ -95,6 +108,29 @@ func TestMultiNodeGenerationIntegration(t *testing.T) {
 			t.Fatal(err)
 		}
 		previous[name] = data
+		docs := readDocuments(t, data)
+		if machine, ok := docs["/"]["machine"].(map[string]any); ok && machine["kubelet"] != nil {
+			t.Fatal("legacy kubelet remains", name)
+		}
+		for _, volume := range []string{"longhorn", "openebs"} {
+			if docs["UserVolumeConfig/"+volume]["volumeType"] != "directory" {
+				t.Fatal("missing directory volume", name, volume)
+			}
+		}
+		kinds := []string{"KubeletConfig"}
+		if index < 2 {
+			kinds = append(kinds, "KubeAPIServerConfig", "KubeControllerManagerConfig", "KubeSchedulerConfig")
+		}
+		for _, kind := range kinds {
+			image, err := GeneratedNodeValue(path, kind, "image")
+			if err != nil || !strings.HasSuffix(image, ":v1.36.3") {
+				t.Fatal(name, kind, image, err)
+			}
+		}
+		selector := docs["UnattendedInstallConfig/"]["provisioning"].(map[string]any)["diskSelector"].(map[string]any)["match"]
+		if selector != fmt.Sprintf("disk.dev_path == '/dev/sd%c'", 'a'+index) {
+			t.Fatal("disk selector changed", selector)
+		}
 		if index == 2 {
 			for _, forbidden := range []string{"kind: Layer2VIPConfig", "kind: KubeAPIServerConfig", "kind: KubeTalosAPIAccessConfig", "kind: KubeProxyConfig"} {
 				if strings.Contains(string(data), forbidden) {
@@ -103,7 +139,7 @@ func TestMultiNodeGenerationIntegration(t *testing.T) {
 			}
 		}
 		image, err := GeneratedNodeValue(path, "UnattendedInstallConfig", "installer", "image")
-		if err != nil || !strings.Contains(image, strings.Repeat(fmt.Sprint(index+1), 64)) {
+		if err != nil || !strings.Contains(image, strings.Repeat(fmt.Sprint(index+1), 64)+":v1.14.1") {
 			t.Fatal(name, image, err)
 		}
 		role, err := GeneratedNodeValue(path, "", "machine", "type")
@@ -122,6 +158,9 @@ func TestMultiNodeGenerationIntegration(t *testing.T) {
 		if err != nil || value != expected {
 			t.Fatal(name, value, err)
 		}
+	}
+	if helper.TalEnv["TALOS_VERSION"] != "v1.13.0" {
+		t.Fatal("generation mutated source environment")
 	}
 	clientConfig, err := os.ReadFile(TalosconfigPath())
 	if err != nil {

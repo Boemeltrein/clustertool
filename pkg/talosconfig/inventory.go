@@ -10,16 +10,19 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/trueforge-org/clustertool/pkg/helper"
 	"gopkg.in/yaml.v3"
 )
 
-// Inventory contains command targeting metadata only. Talos settings stay in patches.
+// Inventory contains cluster versions and command targeting metadata. Node settings stay in patches.
 type Inventory struct {
-	APIVersion    string `yaml:"apiVersion"`
-	Kind          string `yaml:"kind"`
-	BootstrapNode string `yaml:"bootstrapNode"`
-	Nodes         []Node `yaml:"nodes"`
+	TalosVersion      string `yaml:"talosVersion"`
+	KubernetesVersion string `yaml:"kubernetesVersion"`
+	APIVersion        string `yaml:"apiVersion"`
+	Kind              string `yaml:"kind"`
+	BootstrapNode     string `yaml:"bootstrapNode"`
+	Nodes             []Node `yaml:"nodes"`
 }
 
 type Node struct {
@@ -57,6 +60,17 @@ func LoadInventory() (*Inventory, error) {
 	}
 	if inv.APIVersion != "clustertool/v1" || inv.Kind != "ClusterConfig" || len(inv.Nodes) == 0 {
 		return nil, fmt.Errorf("clustertool.yaml requires apiVersion: clustertool/v1, kind: ClusterConfig and at least one node")
+	}
+	for _, setting := range []struct{ name, value string }{
+		{"talosVersion", inv.TalosVersion}, {"kubernetesVersion", inv.KubernetesVersion},
+	} {
+		if !strings.HasPrefix(setting.value, "v") {
+			return nil, fmt.Errorf("clustertool.yaml requires %s in vMAJOR.MINOR.PATCH format", setting.name)
+		}
+		version, err := semver.StrictNewVersion(strings.TrimPrefix(setting.value, "v"))
+		if err != nil || version.Metadata() != "" {
+			return nil, fmt.Errorf("clustertool.yaml: invalid %s %q; use vMAJOR.MINOR.PATCH with an optional prerelease suffix", setting.name, setting.value)
+		}
 	}
 	names, addresses := map[string]bool{}, map[string]bool{}
 	bootstrap := false

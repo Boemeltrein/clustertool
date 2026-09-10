@@ -49,10 +49,7 @@ func GenKubeUpgrade(target string) (Command, error) {
 	}
 	var version string
 	for _, n := range inv.Nodes {
-		image, e := talosconfig.GeneratedNodeValue(talosconfig.NodeConfigPath(n), "", "machine", "kubelet", "image")
-		if e != nil {
-			image, e = talosconfig.GeneratedNodeValue(talosconfig.NodeConfigPath(n), "KubeletConfig", "image")
-		}
+		image, e := talosconfig.GeneratedNodeValue(talosconfig.NodeConfigPath(n), "KubeletConfig", "image")
 		if e != nil {
 			return Command{}, e
 		}
