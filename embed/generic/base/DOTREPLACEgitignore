@@ -1,7 +1,5 @@
 talos/generated/
 *sopssecret.secret.yaml
-sopssecret.secret.yaml
-cluster/main/kubernetes/**/bootstrap-values.yaml.ct
 *kubeconfig
 
 talos/.generate-*/
