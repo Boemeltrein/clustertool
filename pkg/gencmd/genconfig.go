@@ -11,6 +11,7 @@ import (
 	"github.com/trueforge-org/clustertool/pkg/initfiles"
 	"github.com/trueforge-org/clustertool/pkg/sops"
 	"github.com/trueforge-org/clustertool/pkg/talosconfig"
+	fthelper "github.com/trueforge-org/forgetool/v4/pkg/helper"
 )
 
 func GenConfig(args []string) error {
@@ -18,6 +19,9 @@ func GenConfig(args []string) error {
 		return fmt.Errorf("run init again after completing clusterenv.yaml")
 	}
 	if err := sops.DecryptFiles(); err != nil {
+		return err
+	}
+	if err := confirmTalosVersion(fthelper.GetYesOrNo); err != nil {
 		return err
 	}
 	if err := initfiles.GenTalEnvConfigMap(); err != nil {
