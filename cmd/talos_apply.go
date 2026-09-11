@@ -95,7 +95,7 @@ var apply = &cobra.Command{
 			if node != "" {
 				return fmt.Errorf("initial cluster setup is incomplete; run talos apply all to resume")
 			}
-			return gencmd.RunBootstrap(extraArgs)
+			return resumeBootstrap(inv.Bootstrap().Address, extraArgs, fthelper.GetYesOrNo, gencmd.RunBootstrap)
 		}
 		needed, err := gencmd.NeedsBootstrap(inv)
 		if err != nil {
@@ -130,4 +130,12 @@ func RunApply(kubeconfig bool, node string, extraArgs []string) error {
 
 func init() {
 	talosCmd.AddCommand(apply)
+}
+
+func resumeBootstrap(address string, args []string, confirm func(string, bool) bool, run func([]string) error) error {
+	fmt.Printf("An unfinished cluster bootstrap was found for node %s.\n", address)
+	if !confirm("Resume cluster setup? [y/n]: ", false) {
+		return fmt.Errorf("bootstrap resume cancelled")
+	}
+	return run(args)
 }

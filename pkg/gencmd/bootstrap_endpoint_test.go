@@ -1,6 +1,7 @@
 package gencmd
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -12,6 +13,9 @@ func TestBootstrapEndpointsAndResume(t *testing.T) {
 	for _, resumed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "new", true: "resumed"}[resumed], func(t *testing.T) {
 			mockExecution(t)
+			oldBootstrapRun := runBootstrapCommand
+			t.Cleanup(func() { runBootstrapCommand = oldBootstrapRun })
+			runBootstrapCommand = func(_ context.Context, args []string) ([]byte, error) { return runCommand(args, true) }
 			inv := &talosconfig.Inventory{APIVersion: "clustertool/v1", Kind: "ClusterConfig", BootstrapNode: "cp2", Nodes: []talosconfig.Node{
 				{Name: "cp1", Role: "control-plane", Address: "192.0.2.11"},
 				{Name: "cp2", Role: "control-plane", Address: "192.0.2.12"},
@@ -26,6 +30,9 @@ func TestBootstrapEndpointsAndResume(t *testing.T) {
 				if args[1] == "etcd" {
 					if resumed && strings.Contains(argv, " -e 192.0.2.12") {
 						return []byte("NODE ID HOSTNAME PEER URLS CLIENT URLS LEARNER\n192.0.2.12 1 cp2 https://192.0.2.12:2380 https://192.0.2.12:2379 false\n"), nil
+					}
+					if !strings.Contains(argv, " -e 192.0.2.12") {
+						return []byte("x509: certificate signed by unknown authority"), errors.New("exit status 1")
 					}
 					return nil, errors.New("etcd unavailable")
 				}

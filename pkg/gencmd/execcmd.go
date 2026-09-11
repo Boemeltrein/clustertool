@@ -51,17 +51,11 @@ func executeCommand(cmd Command) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	deadline := time.Now().Add(15 * time.Minute)
-	for {
-		out, err := runCommand(cmd.Args, false)
-		if err == nil {
-			return out, nil
-		}
-		if cmd.Args[1] != "bootstrap" || !strings.Contains(string(out), "bootstrap is not available yet") || time.Now().After(deadline) {
-			return out, fmt.Errorf("node %s, %s: %w: %s", cmd.Node, cmd.Args[1], err, strings.TrimSpace(string(out)))
-		}
-		time.Sleep(5 * time.Second)
+	out, err := runCommand(cmd.Args, false)
+	if err != nil {
+		return out, fmt.Errorf("node %s, %s: %w: %s", cmd.Node, cmd.Args[1], err, strings.TrimSpace(string(out)))
 	}
+	return out, nil
 }
 
 func resolveControlPlane(cmd Command) (Command, error) {
