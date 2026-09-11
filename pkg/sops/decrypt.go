@@ -15,7 +15,6 @@ func DecryptFiles() error {
 	// Get a list of encrypted files
 	files, err := ExecuteCheck(false)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to execute check for encrypted files")
 		return err
 	}
 
@@ -30,21 +29,18 @@ func DecryptFiles() error {
 
 			data, err := os.ReadFile(file.Path)
 			if err != nil {
-				log.Error().Err(err).Msgf("Error reading file %s", file.Path)
-				return fmt.Errorf("error reading file %s: %v", file.Path, err)
+				return fmt.Errorf("error reading file %s: %w", file.Path, err)
 			}
 
 			// Verify integrity before replacing the encrypted file.
 			decrypted, err := decryptData(data, GetFormat(file.Path))
 			if err != nil {
-				log.Error().Err(err).Msgf("Error decrypting file %s", file.Path)
-				return fmt.Errorf("error decrypting file %s: %v", file.Path, err)
+				return fmt.Errorf("error decrypting file %s: %w", file.Path, err)
 			}
 
 			// Write decrypted data back to file
 			if err := os.WriteFile(file.Path, decrypted, 0644); err != nil {
-				log.Error().Err(err).Msgf("Error writing decrypted data to file %s", file.Path)
-				return fmt.Errorf("error writing decrypted data to file %s: %v", file.Path, err)
+				return fmt.Errorf("error writing decrypted data to file %s: %w", file.Path, err)
 			}
 			log.Debug().Msgf("Successfully decrypted file: %s", file.Path)
 		}
@@ -55,7 +51,10 @@ func DecryptFiles() error {
 		log.Info().Msg("Nothing to decrypt")
 	}
 
-	initfiles.LoadTalEnv(true)
+	if err := initfiles.LoadTalEnv(true); err != nil {
+		return err
+
+	}
 	log.Info().Msg("All files decrypted successfully")
 	return nil
 }
@@ -67,7 +66,6 @@ func decryptData(data []byte, format string) ([]byte, error) {
 	// Decrypt data
 	decrypted, err := decrypt.Data(data, format)
 	if err != nil {
-		log.Error().Err(err).Msg("Decryption failed")
 		return nil, err
 	}
 

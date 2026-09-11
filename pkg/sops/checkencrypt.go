@@ -28,7 +28,6 @@ func ExecuteCheck(useStagedFiles bool) ([]EncrFileData, error) {
 	// Step 1: Load the SOPS configuration.
 	config, err := LoadSopsConfig()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to load SOPS config")
 		return nil, err
 	}
 	log.Trace().Msg("SOPS configuration loaded successfully")
@@ -36,7 +35,6 @@ func ExecuteCheck(useStagedFiles bool) ([]EncrFileData, error) {
 	// Step 2: Get the files from .sops.yaml configuration.
 	allFiles, err := filesToCheck(config)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get files to check")
 		return nil, err
 	}
 	log.Debug().Msgf("Files to check: %v", allFiles)
@@ -47,7 +45,6 @@ func ExecuteCheck(useStagedFiles bool) ([]EncrFileData, error) {
 		// Step 3: Get the staged files from Git.
 		stagedFiles, err := fthelper.GetStagedFiles()
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to get staged files")
 			return nil, err
 		}
 
@@ -78,8 +75,7 @@ func ExecuteCheck(useStagedFiles bool) ([]EncrFileData, error) {
 		}
 
 		if err := fthelper.StageFiles(filePaths); err != nil {
-			log.Error().Err(err).Msg("Error staging files")
-			return nil, fmt.Errorf("error staging files: %v", err)
+			return nil, fmt.Errorf("error staging files: %w", err)
 		}
 		log.Info().Msg("All staged files processed successfully")
 	} else {
@@ -92,8 +88,7 @@ func ExecuteCheck(useStagedFiles bool) ([]EncrFileData, error) {
 	for i, file := range filesToCheck {
 		data, err := os.ReadFile(file.Path)
 		if err != nil {
-			log.Error().Err(err).Msgf("Error reading file %s", file.Path)
-			return nil, fmt.Errorf("error reading file %s: %v", file.Path, err)
+			return nil, fmt.Errorf("error reading file %s: %w", file.Path, err)
 		}
 		log.Trace().Msgf("Read file %s successfully", file.Path)
 
@@ -230,8 +225,7 @@ func filesToCheck(config SopsConfig) ([]EncrFileData, error) {
 		// Compile the path regex from the rule
 		pathRegex, err := regexp.Compile(rule.PathRegex)
 		if err != nil {
-			log.Error().Err(err).Msg("Invalid path regex in .sops.yaml")
-			return nil, fmt.Errorf("invalid path regex in .sops.yaml: %v", err)
+			return nil, fmt.Errorf("invalid path regex in .sops.yaml: %w", err)
 		}
 
 		// Find files that match the regex
@@ -246,7 +240,6 @@ func filesToCheck(config SopsConfig) ([]EncrFileData, error) {
 			return nil
 		})
 		if err != nil {
-			log.Error().Err(err).Msg("Error walking file paths")
 			return nil, err
 		}
 	}

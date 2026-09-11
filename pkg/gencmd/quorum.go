@@ -68,7 +68,7 @@ func controlPlaneGuard(address string) (bool, error) {
 	for _, host := range hosts {
 		n, ok := known[host]
 		if !ok {
-			return false, fmt.Errorf("live etcd member %s is absent from generated inventory; reconcile inventory before maintenance", host)
+			return false, fmt.Errorf("live etcd member %s is absent from generated clustertool.yaml nodes; reconcile clustertool.yaml before maintenance", host)
 		}
 		if _, err := nodestatus.CheckReadyStatus(n.Address, true); err != nil {
 			return false, fmt.Errorf("etcd member %s is not ready: %w", host, err)

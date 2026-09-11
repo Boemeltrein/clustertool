@@ -23,11 +23,15 @@ func GenConfig(args []string) error {
 	if err := initfiles.GenTalEnvConfigMap(); err != nil {
 		return err
 	}
-	initfiles.CheckEnvVariables()
+	if err := initfiles.CheckEnvVariables(); err != nil {
+		return err
+	}
 	if err := talosconfig.Generate(); err != nil {
 		return err
 	}
-	initfiles.UpdateGitRepo()
+	if err := initfiles.UpdateGitRepo(); err != nil {
+		return err
+	}
 
 	if err := fluxhandler.ProcessDirectory(path.Join(helper.ClusterPath, "kubernetes")); err != nil {
 		return err

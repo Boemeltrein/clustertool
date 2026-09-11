@@ -120,7 +120,7 @@ func (i *Inventory) Select(target string) ([]Node, error) {
 			return []Node{n}, nil
 		}
 	}
-	return nil, fmt.Errorf("node %q is not in the inventory", target)
+	return nil, fmt.Errorf("node %q is not in clustertool.yaml", target)
 }
 
 func (i *Inventory) Bootstrap() Node {

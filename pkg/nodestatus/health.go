@@ -45,7 +45,6 @@ func CheckHealth(node string, status string, silent bool) error {
 	} else if status == "" && strings.Contains(out, "running") {
 		_, err = CheckReadyStatus(node, silent)
 		if err != nil {
-
 			errstring := "healthcheck failed. status: " + string(out) + " error: " + err.Error()
 
 			if !silent {
@@ -68,9 +67,7 @@ func CheckHealth(node string, status string, silent bool) error {
 func WaitForHealth(node string, status []string) (string, error) {
 	statusmsg := ""
 	if len(status) > 0 {
-		for _, check := range status {
-			statusmsg += ", " + check
-		}
+		statusmsg = strings.Join(status, ", ")
 	} else {
 		statusmsg = "running"
 		status = []string{"ready"}

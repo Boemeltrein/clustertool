@@ -5,8 +5,10 @@ configuration layout and automatic migration are not supported.
 
 ## Files and initialization
 
-`clustertool init` copies the embedded scaffold and creates `secrets.sops.yaml`
-only when no identity exists. Existing secrets are retained.
+On the first `clustertool init`, ClusterTool copies the scaffold and asks you to
+complete `clusterenv.yaml`. Run `init` again after entering those settings. The
+completed initialization creates `secrets.sops.yaml` only when no identity exists.
+Existing secrets are retained.
 
 ```text
 clusters/main/talos/
@@ -28,7 +30,9 @@ Edit source documents in `patches/`, not `generated/`. Generation reads YAML fil
 in filename order from `patches/all/`, then `patches/<role>/`, then
 `patches/nodes/<name>/`. Later patches can override earlier settings.
 The worker role directory may be empty. Each configured node requires its own
-node directory, hostname, installer image and static management address.
+node directory, hostname and installer image. Its management address must agree
+with any static addresses in its network documents; DHCP requires a predictable
+address matching `clustertool.yaml`.
 
 ## ClusterTool configuration
 
@@ -208,8 +212,10 @@ During initial setup, the bootstrap node is installed first. Cilium and the CSR
 approver are installed before remaining nodes join. Other charts and Flux follow.
 An identity-bound `.bootstrap-in-progress.json` checkpoint allows `talos apply all`
 to resume setup after interruption. Live etcd membership prevents a second bootstrap.
-Already deployed Helm releases are kept; an existing failed/pending release requires
-operator recovery before retrying. The checkpoint is removed after successful setup.
+Already deployed Helm releases are kept. Steps that require readiness still wait
+for their existing resources. An existing failed/pending release requires operator
+recovery before retrying; an install timeout is returned without blindly issuing
+a second install. The checkpoint is removed after successful setup.
 It contains no credentials and is ignored by the copied Git ignore file.
 
 `talos upgrade [name-or-IP|all]` uses each selected node's installer image, waits for
@@ -232,32 +238,47 @@ select a reachable authenticated control plane.
 
 ## Settings represented in the native documents
 
-| Previous configuration | New file under `talos/` |
+| Setting | File under `talos/` |
 | --- | --- |
-| Install disk at most 1600 GB; no disk wipe | `patches/nodes/control-1/00-install.yaml` (`disk.size <= 2000u * GB`, excluding loop devices, read-only devices and CD-ROMs) |
-| Hostname `k8s-control-1` | `patches/nodes/control-1/01-hostname.yaml` |
-| Machine certificate SANs `127.0.0.1` and VIP | `patches/all/02-machine.yaml` |
-| Cluster pod/service networks | `patches/all/10-cluster.yaml` |
+| Talos/Kubernetes versions and node selection | `clustertool.yaml` |
+| Install image, schematic and writable-disk selector up to 2000 GB | `patches/nodes/control-1/00-install.yaml` |
+| Hostname `k8s-control-1` | `patches/nodes/control-1/10-hostname.yaml` |
+| Machine certificate SANs and cluster pod/service networks | `patches/all/10-cluster.yaml` |
 | `eth0`, static address, default gateway, VIP | `patches/nodes/control-1/20-network.yaml` |
-| DNS `1.1.1.1`, `8.8.8.8`; all three hostDNS flags | `patches/all/21-resolver.yaml` |
-| Server certificate rotation, maxPods 250, shutdown 15s/10s, GC 50/30/30m | `patches/all/30-kubelet.yaml` |
-| OpenEBS and Longhorn bind mounts with `bind,rshared,rw` | `patches/all/30-kubelet.yaml` |
-| Control-plane scheduling | `patches/control-plane/30-scheduling.yaml` |
-| All 14 sysctls, Cloudflare NTP and 13 registry mirrors with original endpoint order | `patches/all/40-system.yaml` |
-| `nvme_tcp`, `vfio_pci`, `uio_pci_generic` | `patches/all/41-kernel.yaml` |
-| Containerd `discard_unpacked_layers = false` | `patches/all/42-cri.yaml` |
-| `/etc/nfsmount.conf`, mode 0644, NFS 4.2/hard/nconnect 16/noatime | `patches/all/43-nfs.yaml` |
-| Kubernetes 1.37, API access for system-upgrade, aggregator routing, controller/scheduler bind addresses, scheduler policy, disabled proxy and metrics address, PodSecurity exemptions, no Flannel | `patches/control-plane/10-kubernetes.yaml` |
-| etcd metrics at `http://0.0.0.0:2381` | `patches/control-plane/20-etcd.yaml` |
+| DNS servers, hostDNS and search-domain policy | `patches/all/20-network.yaml` |
+| Cloudflare NTP | `patches/all/21-time.yaml` |
+| Certificate rotation, maxPods, shutdown and image garbage collection | `patches/all/30-kubelet.yaml` |
+| Longhorn and OpenEBS directories on EPHEMERAL | `patches/all/31-storage.yaml` |
+| Sysctl values | `patches/all/40-sysctls.yaml` |
+| `nvme_tcp`, `vfio_pci`, `uio_pci_generic` | `patches/all/41-kernel-modules.yaml` |
+| Containerd unpacked layers and device ownership | `patches/all/42-cri.yaml` |
+| `/etc/nfsmount.conf` | `patches/all/43-nfs.yaml` |
+| Registry mirrors | `patches/all/50-registrymirror.yaml` |
+| Workload isolation | `patches/all/60-security.yaml` |
+| API access, control-plane settings, disabled kube-proxy, PodSecurity exemptions and no Flannel | `patches/control-plane/10-kubernetes.yaml` |
+| Etcd metrics at `http://0.0.0.0:2381` | `patches/control-plane/20-etcd.yaml` |
+| Scheduling on control-plane nodes | `patches/control-plane/30-scheduling.yaml` |
 | Docker Hub authentication, when copied into active patches | `examples/44-registry-auth.yaml` |
-| Optional NVIDIA modules and BPF hardening | `examples/50-nvidia.yaml` |
+| NVIDIA modules and BPF hardening, when copied into active patches | `examples/50-nvidia.yaml` |
 
-The API server endpoint is passed to `talosctl gen config`; its additional SANs
-are in `patches/control-plane/10-kubernetes.yaml`. The two existing storage mounts require the official legacy
-`machine.kubelet` section: Talos 1.14's `KubeletConfig` has no `extraMounts` field.
-The generated `KubeletConfig` document is deleted to avoid conflicting configuration.
-The machine certificate SANs and etcd metrics also use official legacy fields.
-These remain loose YAML patches; no replacement configuration schema is introduced.
+The API endpoint is passed to `talosctl gen config`; its additional SANs are in
+`patches/control-plane/10-kubernetes.yaml`. Machine certificate SANs and etcd
+metrics still use official legacy fields. Kubelet uses native `KubeletConfig`;
+there is no legacy `machine.kubelet` block or `KubeletConfig` deletion patch.
+The installer patch does not override `wipe`; review Talos' default and the
+selected installation disk before installing a node.
+
+## Command errors
+
+`decrypt` and `encrypt` return a non-zero exit code on failure. Generation, Talos
+commands and manual Flux bootstrap stop when decryption fails. Decryption errors
+include the file path and original cause in one final command error. A corrupted
+encrypted value or MAC is rejected before that file is overwritten.
+
+To inspect the exit code in a shell, run `echo $?` immediately after the command.
+A successful command returns `0`. Failed commands may already have completed
+earlier steps: this is not a transaction across all files or nodes. Review the
+reported failure before retrying. Never test damaged secrets in your live copy.
 
 
 See [multinode verification](multinode-validation.md) for automated coverage and

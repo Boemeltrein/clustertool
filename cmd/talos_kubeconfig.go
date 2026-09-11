@@ -30,7 +30,9 @@ var kubeconfig = &cobra.Command{
 		if err := sops.DecryptFiles(); err != nil {
 			return err
 		}
-		initfiles.LoadTalEnv(false)
+		if err := initfiles.LoadTalEnv(false); err != nil {
+			return err
+		}
 		log.Info().Msg("Running Cluster kubeconfig")
 
 		taloscmds := gencmd.GenPlain("kubeconfig", node, extraArgs)

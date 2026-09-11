@@ -24,7 +24,9 @@ var health = &cobra.Command{
 		if err := sops.DecryptFiles(); err != nil {
 			return err
 		}
-		initfiles.LoadTalEnv(false)
+		if err := initfiles.LoadTalEnv(false); err != nil {
+			return err
+		}
 		log.Info().Msg("Running Cluster HealthCheck")
 		healthcmd := gencmd.GenPlain("health", "", []string{})
 		if len(healthcmd) == 0 {
@@ -42,4 +44,3 @@ var health = &cobra.Command{
 func init() {
 	talosCmd.AddCommand(health)
 }
-

@@ -8,6 +8,24 @@ Use fresh volumes. Changing a default path does not move existing Longhorn
 replicas or OpenEBS PV data. Confirm that Flux/Helm has applied the updated
 HelmReleases; `genconfig` alone does not reconcile those releases.
 
+## Recorded result (2026-09-10)
+
+The operator completed this test on build `test-0124720f10ec`, Talos v1.14.0 and
+Kubernetes v1.37.0, on the initial control-plane node:
+
+- Both 1 GiB claims became Bound and the test deployment became available.
+- Both marker files retained `Thu Sep 10 17:02:17 UTC 2026` after pod recreation
+  and a node reboot; `cmp` reported no difference.
+- The container saw an ext4 Longhorn block device at `/longhorn` and the node's
+  existing XFS filesystem at `/openebs`.
+- Longhorn's configured disk path was `/var/mnt/longhorn`; the OpenEBS PV's
+  `spec.local.path` was `/var/mnt/openebs/pvc-<claim-id>`.
+
+The OpenEBS hostpath mount reports the backing filesystem's capacity in `df`;
+the PVC's requested size does not create a separate partition. These results
+do not establish multi-node replica failover or storage readiness on every node.
+Repeat with fresh claims on other intended storage nodes as needed.
+
 ## Check configuration and storage readiness
 
 1. Run `clustertool genconfig` and inspect every generated node configuration:

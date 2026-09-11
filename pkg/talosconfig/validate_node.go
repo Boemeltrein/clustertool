@@ -32,7 +32,7 @@ func validateNodeOutput(node Node, path string) error {
 				expected = "controlplane"
 			}
 			if machine["type"] != expected {
-				return fmt.Errorf("node %s: generated machine type does not match inventory role %s", node.Name, node.Role)
+				return fmt.Errorf("node %s: generated machine type does not match clustertool.yaml role %s", node.Name, node.Role)
 			}
 		}
 		if node.Role == "worker" {

@@ -23,9 +23,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+var errInitialSetup = errors.New("initial environment setup required")
+
 func InitFiles() error {
 	for _, step := range []func() error{removeRunAgainFile, ageGen, genRootFiles, genBaseFiles, UpdateRootFiles, UpdateBaseFiles} {
 		if err := step(); err != nil {
+			if errors.Is(err, errInitialSetup) {
+				return nil
+			}
 			return err
 		}
 	}
@@ -38,8 +43,12 @@ func InitFiles() error {
 	if err := GenTalEnvConfigMap(); err != nil {
 		return err
 	}
-	UpdateGitRepo()
-	fluxhandler.CreateGitSecret(helper.TalEnv["GITHUB_REPOSITORY"])
+	if err := UpdateGitRepo(); err != nil {
+		return err
+	}
+	if err := fluxhandler.CreateGitSecret(helper.TalEnv["GITHUB_REPOSITORY"]); err != nil {
+		return fmt.Errorf("create Git deploy secret: %w", err)
+	}
 	if err := GenSopsSecret(); err != nil {
 		return err
 	}
@@ -58,24 +67,17 @@ func InitFiles() error {
 }
 
 func genKubernetes() error {
-
-	err := fthelper.CopyDir(helper.KubeCache, helper.ClusterPath+"/kubernetes", false)
-	if err != nil {
-		log.Info().Msgf("Error: %v", err)
-	} else {
-		log.Info().Msgf("Kubernetes files copied successfully.")
+	if err := fthelper.CopyDir(helper.KubeCache, helper.ClusterPath+"/kubernetes", false); err != nil {
+		return fmt.Errorf("copy Kubernetes files: %w", err)
 	}
-
-	fthelper.ReplaceInFile(path.Join(helper.ClusterPath, "/kubernetes/flux-entry.yaml"), "REPLACEWITHCLUSTERNAME", helper.ClusterName)
-	if err != nil {
-		log.Fatal().Err(err).Msgf("Error: %s", err)
+	if err := fthelper.ReplaceInFile(path.Join(helper.ClusterPath, "kubernetes/flux-entry.yaml"), "REPLACEWITHCLUSTERNAME", helper.ClusterName); err != nil {
+		return fmt.Errorf("update Flux entry: %w", err)
 	}
-
+	log.Info().Msg("Kubernetes files copied successfully.")
 	return nil
 }
 
 func GenTalEnvConfigMap() error {
-
 	log.Info().Msg("Creating TalEnv configmap reference 'clustersettings'.")
 	// Read the content of the talenv.yaml file
 	talenvContent, err := os.ReadFile(helper.ClusterEnvFile)
@@ -99,23 +101,28 @@ func GenTalEnvConfigMap() error {
 	clusterSettings := filepath.Join("flux-system", "flux", "clustersettings.secret.yaml")
 	clusterSettingsDest := filepath.Join(helper.ClusterPath+"/kubernetes", clusterSettings)
 	clusterSettingsSrc := filepath.Join(helper.KubeCache, clusterSettings)
-	os.MkdirAll(filepath.Join(helper.ClusterPath, "/kubernetes", "flux-system", "flux"), os.ModePerm)
-	err = fthelper.CopyFile(clusterSettingsSrc, clusterSettingsDest, true)
+	if err := os.MkdirAll(filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux"), os.ModePerm); err != nil {
+		return err
+	}
+	if err := fthelper.CopyFile(clusterSettingsSrc, clusterSettingsDest, true); err != nil {
+		return fmt.Errorf("copy cluster settings: %w", err)
+	}
 	log.Debug().Msgf("clusterSettingsDest %v", clusterSettingsDest)
-	fthelper.ReplaceInFile(clusterSettingsDest, "REPLACEWITHENV", indentedTalenvContent)
+	err = fthelper.ReplaceInFile(clusterSettingsDest, "REPLACEWITHENV", indentedTalenvContent)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Error: %s")
+		return err
 	}
 	log.Info().Msg("Configmap reference Created.")
 	return nil
 }
 
-func UpdateGitRepo() {
+func UpdateGitRepo() error {
 	if helper.TalEnv["GITHUB_REPOSITORY"] != "" {
 		repoPath := filepath.Join("repositories", "git", "this-repo.yaml")
 		gitrepo := FormatGitURL(helper.TalEnv["GITHUB_REPOSITORY"])
-		fthelper.ReplaceInFile(repoPath, "ssh://REPLACEWITHGITREPO", gitrepo)
+		return fthelper.ReplaceInFile(repoPath, "ssh://REPLACEWITHGITREPO", gitrepo)
 	}
+	return nil
 }
 
 // FormatGitURL formats the input Git URL according to the specified rules.
@@ -158,10 +165,11 @@ func genBaseFiles() error {
 		clusterEnvPresent = true
 		log.Debug().Msg("Detected existing cluster, continuing")
 	} else if os.IsNotExist(err) {
-		createRunAgainFile()
+		if err := createRunAgainFile(); err != nil {
+			return err
+		}
 		log.Warn().Msg("New cluster detected, creating clusterenv.yaml\n Please fill out ClusterEnv.yaml and run init again, after setting-up clusterenv.yaml!")
 	} else {
-		log.Fatal().Err(err).Msgf("Error checking clusterenv file: %s", err)
 		return err
 	}
 
@@ -173,7 +181,7 @@ func genBaseFiles() error {
 	}
 
 	if !clusterEnvPresent {
-		os.Exit(0)
+		return errInitialSetup
 	}
 
 	log.Info().Msg("basefiles successfully altered.")
@@ -181,14 +189,12 @@ func genBaseFiles() error {
 }
 
 // Create the "RUNAGAIN" file
-func createRunAgainFile() {
+func createRunAgainFile() error {
 	file, err := os.Create("RUNAGAIN")
 	if err != nil {
-		log.Err(err).Msg("error creating runagain file...")
-		return
+		return fmt.Errorf("create RUNAGAIN: %w", err)
 	}
-	defer file.Close()
-	return
+	return file.Close()
 }
 
 // Remove the "RUNAGAIN" file if it exists
@@ -196,8 +202,7 @@ func removeRunAgainFile() error {
 	if CheckRunAgainFileExists() {
 		err := os.Remove("RUNAGAIN")
 		if err != nil {
-			log.Err(err).Msg("error removing runagain file...")
-			return err
+			return fmt.Errorf("remove RUNAGAIN: %w", err)
 		}
 		log.Debug().Msg("RUNAGAIN file removed.")
 	} else {
@@ -213,48 +218,43 @@ func CheckRunAgainFileExists() bool {
 }
 
 func UpdateBaseFiles() error {
-	log.Info().Msg("Updating Base files for cluster: helper.ClusterPath")
+	log.Info().Msgf("Updating base files for cluster: %s", helper.ClusterPath)
 	// Read filenames in source directory
 	sourceFiles, err := readFilenamesInDir(helper.BaseCache)
 	if err != nil {
-		log.Info().Msgf("Error reading source directory: %v\n", err)
-		return err
+		return fmt.Errorf("read template directory: %w", err)
 	}
 
 	// Process each file in the target directory
 	for _, filename := range sourceFiles {
 		sourceFilePath := filepath.Join(helper.BaseCache, filename)
 		targetFilePath := filepath.Join(helper.ClusterPath+"", fthelper.ReplaceDotInFilename(filename))
-		fthelper.ReplaceContentBetweenLines(targetFilePath, sourceFilePath, "## Do not edit between this and DO NOT REMOVE", "## DO NOT REMOVE: Personal setting go under this line")
+		if err := fthelper.ReplaceContentBetweenLines(targetFilePath, sourceFilePath, "## Do not edit between this and DO NOT REMOVE", "## DO NOT REMOVE: Personal setting go under this line"); err != nil {
+			return fmt.Errorf("update %s: %w", targetFilePath, err)
+		}
 	}
 	log.Info().Msg("basefiles successfully updated.")
 
-	CheckEnvVariables()
+	if err := CheckEnvVariables(); err != nil {
+		return err
+	}
 
 	return nil
 
 }
 
 func genRootFiles() error {
-
-	err := fthelper.CopyDir(helper.RootCache, "./", false)
-	if err != nil {
-		log.Info().Msgf("Error: %v", err)
-	} else {
-		log.Info().Msg("Root files copied successfully.")
+	if err := fthelper.CopyDir(helper.RootCache, "./", false); err != nil {
+		return fmt.Errorf("copy root files: %w", err)
 	}
-
 	agePubKey, err := GetPubKey()
 	if err != nil {
-		log.Fatal().Err(err).Msg("error: %v")
+		return err
 	}
-	log.Info().Msgf("Public Key: %v", agePubKey)
-	fthelper.ReplaceInFile(".sops.yaml", "REPLACEME", agePubKey)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Error: %s")
+	if err := fthelper.ReplaceInFile(".sops.yaml", "REPLACEME", agePubKey); err != nil {
+		return fmt.Errorf("configure .sops.yaml: %w", err)
 	}
-
-	log.Info().Msg("basefiles successfully altered.")
+	log.Info().Msg("Root files copied successfully.")
 	return nil
 }
 
@@ -262,29 +262,32 @@ func UpdateRootFiles() error {
 	// Read filenames in source directory
 	sourceFiles, err := readFilenamesInDir(helper.RootCache)
 	if err != nil {
-		log.Info().Msgf("Error reading source directory: %v\n", err)
-		return err
+		return fmt.Errorf("read template directory: %w", err)
 	}
 
 	// Process each file in the target directory
 	for _, filename := range sourceFiles {
 		sourceFilePath := filepath.Join(helper.RootCache, filename)
 		targetFilePath := filepath.Join("./", fthelper.ReplaceDotInFilename(filename))
-		fthelper.ReplaceContentBetweenLines(targetFilePath, sourceFilePath, "## Do not edit between this and DO NOT REMOVE", "## DO NOT REMOVE: Personal setting go under this line")
+		if err := fthelper.ReplaceContentBetweenLines(targetFilePath, sourceFilePath, "## Do not edit between this and DO NOT REMOVE", "## DO NOT REMOVE: Personal setting go under this line"); err != nil {
+			return fmt.Errorf("update %s: %w", targetFilePath, err)
+		}
 	}
 	log.Info().Msg("rootfiles successfully updated.")
 
 	agePubKey, err := GetPubKey()
 	if err != nil {
-		log.Fatal().Err(err).Msg("error: %v")
+		return err
 	}
 
-	fthelper.ReplaceInFile(".sops.yaml", "REPLACEME", agePubKey)
+	err = fthelper.ReplaceInFile(".sops.yaml", "REPLACEME", agePubKey)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Error: %s")
+		return err
 	}
 
-	CheckEnvVariables()
+	if err := CheckEnvVariables(); err != nil {
+		return err
+	}
 
 	return nil
 
@@ -307,55 +310,39 @@ func readFilenamesInDir(dir string) ([]string, error) {
 }
 
 func ResetBootstrapValues() error {
-	LoadTalEnv(false)
-	err := fthelper.CopyDirFiltered(helper.KubeCache, helper.ClusterPath+"/kubernetes", true, `^bootstrap-values\.yaml.ct$`)
-	if err != nil {
-		log.Info().Msg("Error:")
+	if err := LoadTalEnv(false); err != nil {
+		return err
 	}
-
-	err2 := fthelper.EnvSubstRecursive(helper.ClusterPath+"/kubernetes", `^bootstrap-values\.yaml.ct$`, helper.TalEnv)
-	if err2 != nil {
-		log.Info().Msg("Error:")
+	if err := fthelper.CopyDirFiltered(helper.KubeCache, helper.ClusterPath+"/kubernetes", true, `^bootstrap-values\.yaml.ct$`); err != nil {
+		return fmt.Errorf("copy bootstrap values: %w", err)
 	}
-
-	log.Info().Msg("Bootstrap-Values.yaml Files reset successfully.")
+	if err := fthelper.EnvSubstRecursive(helper.ClusterPath+"/kubernetes", `^bootstrap-values\.yaml.ct$`, helper.TalEnv); err != nil {
+		return fmt.Errorf("render bootstrap values: %w", err)
+	}
+	log.Info().Msg("Bootstrap values reset successfully.")
 	return nil
 }
 
 func ageGen() error {
-	outFlag := "age.agekey"
-
-	if _, err := os.Stat(outFlag); err == nil {
-
-	} else if errors.Is(err, os.ErrNotExist) {
-		out := os.Stdout
-		f, err := os.OpenFile(outFlag, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-		if err != nil {
-			log.Fatal().Err(err).Msg("failed to open output file %q: %v")
-		}
-		defer func() {
-			if err := f.Close(); err != nil {
-				log.Fatal().Err(err).Msg("failed to close output file %q: %v")
-			}
-		}()
-		out = f
-		if fi, err := out.Stat(); err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0004 != 0 {
-			log.Info().Msgf("writing secret key to a world-readable file\n")
-		}
-
-		k, err := age.GenerateX25519Identity()
-		if err != nil {
-			log.Fatal().Err(err).Msg("internal error: %v")
-		}
-
-		fmt.Fprintf(out, "# created: %s\n", time.Now().Format(time.RFC3339))
-		fmt.Fprintf(out, "# public key: %s\n", k.Recipient())
-		fmt.Fprintf(out, "%s\n", k)
-
-	} else {
-
+	const filename = "age.agekey"
+	if _, err := os.Stat(filename); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("check age key: %w", err)
 	}
-
+	key, err := age.GenerateX25519Identity()
+	if err != nil {
+		return fmt.Errorf("generate age key: %w", err)
+	}
+	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return fmt.Errorf("create age key: %w", err)
+	}
+	_, writeErr := fmt.Fprintf(f, "# created: %s\n# public key: %s\n%s\n", time.Now().Format(time.RFC3339), key.Recipient(), key)
+	closeErr := f.Close()
+	if err := errors.Join(writeErr, closeErr); err != nil {
+		return fmt.Errorf("write age key: %w", err)
+	}
 	return nil
 }
 

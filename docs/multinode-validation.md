@@ -60,6 +60,33 @@ The Linux amd64 PR workflow runs the tests with the embedded Talos version befor
 packaging the test archive. Its successful run and commit SHA must be checked
 before using a downloaded binary.
 
+## Recorded operator results
+
+On 2026-09-10, build `test-0124720f10ec` completed fresh single-control-plane
+bootstrap and Flux installation on Talos v1.14.0 / Kubernetes v1.37.0. A second
+control plane and a worker were subsequently added to that running cluster;
+all three Kubernetes nodes reported Ready. A worker showing `<none>` in the
+ROLES column is expected without a `node-role.kubernetes.io/worker` label.
+
+On the same build, fresh Longhorn/OpenEBS PVCs retained their original marker
+after pod recreation and a test-node reboot. The operator confirmed Longhorn's
+disk path `/var/mnt/longhorn` and the OpenEBS PV path under `/var/mnt/openebs`.
+This storage result covers the original control-plane node, not every later
+joining node or Longhorn replica failover.
+
+Earlier build `test-184f333f7628` was tested with three control planes, a
+node-specific label change and a same-version schematic upgrade. Applying the
+image setting alone did not change the running extensions; `upgrade --talos-only`
+activated the new image. Those results precede the final layout/storage changes.
+
+The cleanup adds subprocess tests for command failure/success exit codes and
+stopping before further work after decryption errors, plus Helm readiness and
+timeout tests with an in-memory release store. They do not replace live tests.
+Controlled interrupted-bootstrap recovery, a combined Talos/Kubernetes upgrade,
+VIP failover, storage on the additional roles and Tuppr acceptance remain live
+checks to record separately. CI runner configuration is intentionally unchanged
+in this fork; unavailable fork runners are not evidence of passing checks.
+
 ## Operator acceptance on a disposable cluster
 
 Use **three control planes and at least one worker** to test rolling HA maintenance.

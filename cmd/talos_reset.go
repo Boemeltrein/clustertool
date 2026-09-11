@@ -37,7 +37,9 @@ var reset = &cobra.Command{
 		if err := sops.DecryptFiles(); err != nil {
 			return err
 		}
-		initfiles.LoadTalEnv(false)
+		if err := initfiles.LoadTalEnv(false); err != nil {
+			return err
+		}
 		if err := talosconfig.ValidateNode(node); err != nil {
 			return err
 		}

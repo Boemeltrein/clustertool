@@ -70,7 +70,10 @@ var apply = &cobra.Command{
 			return err
 		}
 
-		initfiles.LoadTalEnv(false)
+		if err := initfiles.LoadTalEnv(false); err != nil {
+			return err
+
+		}
 		if err := talosconfig.ValidateNode(node); err != nil {
 			return err
 		}

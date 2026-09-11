@@ -288,7 +288,9 @@ func RunBootstrap(args []string) error {
 
 	log.Info().Msg("------")
 
-	fluxhandler.FluxBootstrap(ctx)
+	if err := fluxhandler.FluxBootstrap(ctx); err != nil {
+		return err
+	}
 
 	log.Info().Msg("Bootstrap: Completed Successfully!")
 	return os.Remove(bootstrapStatePath())
