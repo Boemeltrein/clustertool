@@ -94,6 +94,7 @@ func InstallCharts(charts []HelmChart, repos map[string]*HelmRepo, async bool) e
 		if release.Spec.ReleaseName != "" {
 			name = release.Spec.ReleaseName
 		}
+		log.Info().Msgf("Bootstrap: Installing %s", release.Metadata.Name)
 		if err := HelmInstall(repo.Spec.URL, release.Spec.Chart.Spec.Chart, name, release.Metadata.Namespace, filepath.Join(chart.ChartPath, "values.yaml"), release.Spec.Chart.Spec.Version, chart.Retry, chart.Wait, true); err != nil {
 			return fmt.Errorf("install chart %s: %w", name, err)
 		}
