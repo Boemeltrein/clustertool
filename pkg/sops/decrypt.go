@@ -15,7 +15,7 @@ func DecryptFiles() error {
 	// Get a list of encrypted files
 	files, err := ExecuteCheck(false)
 	if err != nil {
-		return err
+		return fmt.Errorf("check files for decryption: %w", err)
 	}
 
 	// Flag to track if any files were marked as encrypted

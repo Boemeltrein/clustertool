@@ -52,7 +52,7 @@ func bootstrapFluxCD(ctx context.Context) error {
 
 	clusterEntryFile := filepath.Join(helper.ClusterPath, "kubernetes", "flux-entry.yaml")
 	if err := kubectlcmds.KubectlApply(ctx, clusterEntryFile); err != nil {
-		return err
+		return fmt.Errorf("apply cluster Flux entry %s: %w", clusterEntryFile, err)
 	}
 
 	return nil
@@ -62,10 +62,10 @@ func bootstrapFluxCD(ctx context.Context) error {
 func checkGitRepo() error {
 	isRepo, err := helper.IsCurrentDirGitRepo()
 	if err != nil {
-		return err
+		return fmt.Errorf("check Git repository: %w", err)
 	}
 	if !isRepo {
-		errMsg := "Bootstrap: ERROR The current directory is not a Git repository. Cannot bootstrap fluxcd"
+		errMsg := "current directory is not a Git repository"
 		return fmt.Errorf("%s", errMsg)
 	}
 	log.Info().Msg("Bootstrap: The current directory is a valid GIT repository, continuing...")
@@ -82,30 +82,30 @@ func setupFluxCD(ctx context.Context, fluxPath string) error {
 
 	// Rename files for kustomize application
 	if err := os.Rename(filepath.Join(fluxPath, kustomFile), filepath.Join(fluxPath, tmpFile)); err != nil {
-		return err
+		return fmt.Errorf("save Flux kustomization: %w", err)
 	}
 	if err := os.Rename(filepath.Join(fluxPath, bootstrapFile), filepath.Join(fluxPath, kustomFile)); err != nil {
-		return err
+		return fmt.Errorf("activate Flux bootstrap manifest: %w", err)
 	}
 
 	if err := kubectlcmds.KubectlApplyKustomize(ctx, fluxPath); err != nil {
 		log.Error().Err(err).Str("path", fluxPath).Msg("Error applying FluxCD manifest")
 		log.Debug().Msg("Reverting renamed files for fluxbootstrap")
 		if err := os.Rename(filepath.Join(fluxPath, kustomFile), filepath.Join(fluxPath, bootstrapFile)); err != nil {
-			return err
+			return fmt.Errorf("restore Flux bootstrap manifest: %w", err)
 		}
 		if err := os.Rename(filepath.Join(fluxPath, tmpFile), filepath.Join(fluxPath, kustomFile)); err != nil {
-			return err
+			return fmt.Errorf("restore Flux kustomization: %w", err)
 		}
-		return err
+		return fmt.Errorf("apply Flux manifests %s: %w", fluxPath, err)
 	}
 
 	// Revert file renames
 	if err := os.Rename(filepath.Join(fluxPath, kustomFile), filepath.Join(fluxPath, bootstrapFile)); err != nil {
-		return err
+		return fmt.Errorf("restore Flux bootstrap manifest: %w", err)
 	}
 	if err := os.Rename(filepath.Join(fluxPath, tmpFile), filepath.Join(fluxPath, kustomFile)); err != nil {
-		return err
+		return fmt.Errorf("restore Flux kustomization: %w", err)
 	}
 
 	return nil
@@ -117,13 +117,13 @@ func setupRepositories(ctx context.Context, reposFilePath string) error {
 
 	gitRepoFile := filepath.Join(reposFilePath, "git", "this-repo.yaml")
 	if err := kubectlcmds.KubectlApply(ctx, gitRepoFile); err != nil {
-		return err
+		return fmt.Errorf("apply repositories manifest %s: %w", gitRepoFile, err)
 	}
 
 	log.Info().Msg("Bootstrap: Loading repositories flux-entry onto the cluster...")
 	reposEntryFile := filepath.Join(reposFilePath, "flux-entry.yaml")
 	if err := kubectlcmds.KubectlApply(ctx, reposEntryFile); err != nil {
-		return err
+		return fmt.Errorf("apply repositories Flux entry %s: %w", reposEntryFile, err)
 	}
 
 	return nil

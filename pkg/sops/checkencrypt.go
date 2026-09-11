@@ -35,7 +35,7 @@ func ExecuteCheck(useStagedFiles bool) ([]EncrFileData, error) {
 	// Step 2: Get the files from .sops.yaml configuration.
 	allFiles, err := filesToCheck(config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find SOPS files: %w", err)
 	}
 	log.Debug().Msgf("Files to check: %v", allFiles)
 
@@ -45,7 +45,7 @@ func ExecuteCheck(useStagedFiles bool) ([]EncrFileData, error) {
 		// Step 3: Get the staged files from Git.
 		stagedFiles, err := fthelper.GetStagedFiles()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("list staged files: %w", err)
 		}
 
 		if len(stagedFiles) == 0 {
@@ -240,7 +240,7 @@ func filesToCheck(config SopsConfig) ([]EncrFileData, error) {
 			return nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan SOPS file paths: %w", err)
 		}
 	}
 

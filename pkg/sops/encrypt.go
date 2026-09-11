@@ -15,7 +15,7 @@ func EncryptAllFiles() error {
 
 	files, err := ExecuteCheck(false) // Get the list of files and their encryption status
 	if err != nil {
-		return err
+		return fmt.Errorf("check files for encryption: %w", err)
 	}
 
 	log.Debug().Int("fileCount", len(files)).Msg("Found files to process for encryption")

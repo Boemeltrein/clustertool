@@ -113,7 +113,7 @@ func (c *cypher) Decrypt(content []byte, format string) ([]byte, error) {
 	log.Trace().Msg("Decrypting content")
 	decryptedData, err := decrypt.Data(content, format)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decrypt data: %w", err)
 	}
 	log.Info().Msg("Content decrypted successfully")
 	return decryptedData, nil
@@ -144,7 +144,7 @@ func (m *cypher) Encrypt(content []byte, encrConfig EncryptionConfig) (result []
 
 	branches, err := store.LoadPlainFile(content)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse plaintext for encryption: %w", err)
 	}
 	log.Debug().Msg("Plain file loaded successfully")
 
@@ -179,7 +179,7 @@ func (m *cypher) Encrypt(content []byte, encrConfig EncryptionConfig) (result []
 
 	err = common.EncryptTree(encryptTreeOpts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encrypt document tree: %w", err)
 	}
 
 	log.Debug().Msg("Tree encrypted successfully")

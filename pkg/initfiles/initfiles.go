@@ -110,7 +110,7 @@ func GenTalEnvConfigMap() error {
 	log.Debug().Msgf("clusterSettingsDest %v", clusterSettingsDest)
 	err = fthelper.ReplaceInFile(clusterSettingsDest, "REPLACEWITHENV", indentedTalenvContent)
 	if err != nil {
-		return err
+		return fmt.Errorf("render cluster settings %s: %w", clusterSettingsDest, err)
 	}
 	log.Info().Msg("Configmap reference Created.")
 	return nil
@@ -170,7 +170,7 @@ func genBaseFiles() error {
 		}
 		log.Warn().Msg("New cluster detected, creating clusterenv.yaml\n Please fill out ClusterEnv.yaml and run init again, after setting-up clusterenv.yaml!")
 	} else {
-		return err
+		return fmt.Errorf("check cluster environment %s: %w", helper.ClusterEnvFile, err)
 	}
 
 	err := fthelper.CopyDir(helper.BaseCache, helper.ClusterPath+"", false)
@@ -249,7 +249,7 @@ func genRootFiles() error {
 	}
 	agePubKey, err := GetPubKey()
 	if err != nil {
-		return err
+		return fmt.Errorf("read age public key: %w", err)
 	}
 	if err := fthelper.ReplaceInFile(".sops.yaml", "REPLACEME", agePubKey); err != nil {
 		return fmt.Errorf("configure .sops.yaml: %w", err)
@@ -277,12 +277,12 @@ func UpdateRootFiles() error {
 
 	agePubKey, err := GetPubKey()
 	if err != nil {
-		return err
+		return fmt.Errorf("read age public key: %w", err)
 	}
 
 	err = fthelper.ReplaceInFile(".sops.yaml", "REPLACEME", agePubKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("configure .sops.yaml: %w", err)
 	}
 
 	if err := CheckEnvVariables(); err != nil {
