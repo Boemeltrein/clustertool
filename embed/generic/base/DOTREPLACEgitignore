@@ -6,3 +6,5 @@ talos/.generate-*/
 talos/.secrets-*/
 talos/generated.previous/
 talos/.bootstrap-in-progress.json
+
+.decrypted~*.yaml
