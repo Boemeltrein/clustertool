@@ -157,6 +157,9 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 	}
 
 	// Ensure namespace exists or create it
+	if found, err := resumeHelmRelease(actionConfig, releaseName, wait); found || err != nil {
+		return err
+	}
 	if err := ensureNamespace(actionConfig, namespace); err != nil {
 		return fmt.Errorf("failed to ensure namespace exists: %w", err)
 	}
@@ -190,6 +193,8 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 	client.ReleaseName = releaseName
 	client.DryRun = dryRun
 	client.Version = version
+	client.Wait = wait
+	client.Timeout = 15 * time.Minute
 
 	tempValuesName := releaseName + "tempvalues.yaml"
 	tempValuesPath := path.Join(helper.HelmCache, tempValuesName)
@@ -207,7 +212,7 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 
 	helmRelease, err := LoadHelmRelease(helmreleasePath)
 	if err != nil {
-
+		return err
 	}
 	tempHRValuesName := releaseName + "temphrvalues.yaml"
 	tempHRValuesPath := path.Join(helper.HelmCache, tempHRValuesName)
@@ -215,7 +220,9 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 	if err != nil {
 		return fmt.Errorf("error creating temphrvalues.yaml: %w", err)
 	}
-	fthelper.EnvSubst(tempHRValuesPath, helper.TalEnv)
+	if _, err := fthelper.EnvSubst(tempHRValuesPath, helper.TalEnv); err != nil {
+		return fmt.Errorf("render values for %s: %w", releaseName, err)
+	}
 	valueFiles = append(valueFiles, tempHRValuesPath)
 
 	if _, err := os.Stat(valuesFile); err == nil {
@@ -245,26 +252,9 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 
 	// Install the chart with merged values
 	log.Debug().Msg("Installing chart...")
-	release, err := client.Run(chart, vals)
+	release, err := installRelease(client, chart, vals)
 	if err != nil {
-		log.Debug().Msg("Chart install returned an error")
-		if strings.Contains(err.Error(), "timed out") {
-			// Wait for 15 seconds and try again
-			log.Warn().Msg("Chart install recieved a timeout, retrying in 15 seconds...")
-			time.Sleep(15 * time.Second)
-			release, err = client.Run(chart, vals)
-			if err != nil && strings.Contains(err.Error(), "timed out") {
-				return fmt.Errorf("failed to install chart after retry, with another timeout: %w", err)
-			} else if err != nil {
-				return fmt.Errorf("failed to install chart after retry: %w", err)
-			}
-		} else {
-			return fmt.Errorf("failed to install chart: %w", err)
-		}
-	}
-
-	if wait {
-		waitForRelease(actionConfig, release.Name, client.Namespace)
+		return err
 	}
 
 	log.Printf("Installed Chart: %s in namespace: %s\n", release.Name, release.Namespace)
@@ -368,7 +358,9 @@ func HelmUpgrade(repoURL string, chartName string, releaseName string, namespace
 	if err != nil {
 		return fmt.Errorf("error creating temphrvalues.yaml: %w", err)
 	}
-	fthelper.EnvSubst(tempHRValuesPath, helper.TalEnv)
+	if _, err := fthelper.EnvSubst(tempHRValuesPath, helper.TalEnv); err != nil {
+		return fmt.Errorf("render values for %s: %w", releaseName, err)
+	}
 	valueFiles = append(valueFiles, tempHRValuesPath)
 
 	if _, err := os.Stat(valuesFile); err == nil {
@@ -441,7 +433,6 @@ func createNamespace(actionConfig *action.Configuration, namespace string) error
 	}, metav1.CreateOptions{})
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") {
-
 		} else {
 			return fmt.Errorf("failed to create namespace: %w", err)
 		}
