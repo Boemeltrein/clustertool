@@ -119,8 +119,17 @@ func GenTalEnvConfigMap() error {
 func UpdateGitRepo() error {
 	if helper.TalEnv["GITHUB_REPOSITORY"] != "" {
 		repoPath := filepath.Join("repositories", "git", "this-repo.yaml")
+		if _, err := os.Stat(repoPath); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				log.Warn().Msgf("Skipping Git repository update: %s does not exist", filepath.ToSlash(repoPath))
+				return nil
+			}
+			return fmt.Errorf("check Git repository file %s: %w", repoPath, err)
+		}
 		gitrepo := FormatGitURL(helper.TalEnv["GITHUB_REPOSITORY"])
-		return fthelper.ReplaceInFile(repoPath, "ssh://REPLACEWITHGITREPO", gitrepo)
+		if err := fthelper.ReplaceInFile(repoPath, "ssh://REPLACEWITHGITREPO", gitrepo); err != nil {
+			return fmt.Errorf("update Git repository file %s: %w", repoPath, err)
+		}
 	}
 	return nil
 }
