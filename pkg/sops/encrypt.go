@@ -3,6 +3,7 @@ package sops
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 
 	"github.com/rs/zerolog/log"
@@ -115,7 +116,7 @@ func mergeRegex(filePath string, config SopsConfig) string {
 		}
 
 		// Check if the given path matches the current rule's path regex
-		if r.MatchString(filePath) {
+		if r.MatchString(filepath.ToSlash(filePath)) {
 			// Merge the encrypted regex into the mergedRegex string
 			mergedRegex += rule.EncryptedRegex + "|"
 			log.Debug().Msgf("File %s matched regex, adding encrypted regex: %s", filePath, rule.EncryptedRegex)

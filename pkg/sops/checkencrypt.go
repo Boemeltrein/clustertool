@@ -61,7 +61,7 @@ func ExecuteCheck(useStagedFiles bool) ([]EncrFileData, error) {
 				checkPath = filepath.Join("clustertool", checkPath)
 			}
 			for _, stagedFile := range stagedFiles {
-				if checkPath == stagedFile {
+				if filepath.ToSlash(checkPath) == filepath.ToSlash(stagedFile) {
 					filesToCheck = append(filesToCheck, file)
 					break
 				}
@@ -233,7 +233,7 @@ func filesToCheck(config SopsConfig) ([]EncrFileData, error) {
 			if err != nil {
 				return err
 			}
-			if !info.IsDir() && pathRegex.MatchString(path) {
+			if !info.IsDir() && pathRegex.MatchString(filepath.ToSlash(path)) {
 				files = append(files, EncrFileData{Path: path, Encrypted: false})
 				log.Debug().Msgf("Matched file: %s", path)
 			}
