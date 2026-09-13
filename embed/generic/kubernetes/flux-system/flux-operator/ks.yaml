@@ -5,7 +5,7 @@ metadata:
   name: flux-operator
 spec:
   interval: 1h
-  path: clusters/main/kubernetes/flux-system/flux-operator/app
+  path: clusters/REPLACEWITHCLUSTERNAME/kubernetes/flux-system/flux-operator/app
   prune: true
   sourceRef:
     kind: GitRepository

@@ -9,7 +9,7 @@ spec:
     - name: flux-operator
       namespace: flux-system
   interval: 1h
-  path: clusters/main/kubernetes/flux-system/flux-instance/app
+  path: clusters/REPLACEWITHCLUSTERNAME/kubernetes/flux-system/flux-instance/app
   prune: true
   sourceRef:
     kind: GitRepository
