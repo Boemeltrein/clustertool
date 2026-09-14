@@ -67,7 +67,7 @@ resources:
     var resources []string
     for _, file := range files {
         name := file.Name()
-        // Ignore kustomization.yaml and ks.yaml files
+        // Exclude Kustomization files and local SOPS age-key secrets from resources.
         if name == "kustomization.yaml" || name == "ks.yaml" || strings.HasSuffix(name, "sopssecret.secret.yaml") {
             continue
         }
