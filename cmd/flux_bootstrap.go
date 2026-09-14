@@ -11,7 +11,9 @@ import (
 )
 
 var fluxBootstrapLongHelp = strings.TrimSpace(`
-
+Install Flux Operator, wait for it to be ready, then install the FluxInstance.
+The deploy key and SOPS age key are applied before the instance is installed.
+Run genconfig and push your configuration to Git before bootstrapping.
 `)
 
 var fluxbootstrap = &cobra.Command{

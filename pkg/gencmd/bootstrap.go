@@ -22,8 +22,6 @@ var HelmRepos map[string]*fluxhandler.HelmRepo
 func RunBootstrap(args []string) error {
 	extraArgs := args
 	manifestPaths := []string{
-		filepath.Join(helper.KubernetesPath, "flux-system", "flux", "sopssecret.secret.yaml"),
-		filepath.Join(helper.KubernetesPath, "flux-system", "flux", "deploykey.secret.yaml"),
 		filepath.Join(helper.KubernetesPath, "flux-system", "flux", "clustersettings.secret.yaml"),
 	}
 
@@ -202,96 +200,5 @@ func RunBootstrap(args []string) error {
 		}
 	}
 
-	for _, filePath := range manifestPaths {
-		log.Info().Msgf("Bootstrap: Loading Manifest: %v", filePath)
-		if err := kubectlcmds.KubectlApply(ctx, filePath); err != nil {
-			log.Info().Msgf("Error applying manifest for %s: %v\n", filepath.Base(filePath), err)
-			return fmt.Errorf("bootstrap failed: %w", err)
-		}
-	}
-
-	log.Info().Msg("Bootstrap: Base Cluster Configuration Completed, continuing setup...")
-	log.Info().Msg("Bootstrap: Confirming cluster health...")
-	healthcmd := GenPlain("health", bootstrapNode, []string{})
-	if err := ExecCmd(healthcmd[0]); err != nil {
-		return err
-	}
-	stopApprover()
-
-	prioCharts := []fluxhandler.HelmChart{
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/observability/kube-prometheus-stack/app"), Retry: false, Wait: false},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/cert-manager/app"), Retry: false, Wait: false},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/kubernetes-reflector/app"), Retry: false, Wait: false},
-	}
-	if err := fluxhandler.InstallCharts(prioCharts, HelmRepos, false); err != nil {
-		return err
-	}
-
-	intermediateCharts := []fluxhandler.HelmChart{
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/metallb/app"), Retry: false, Wait: false},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/core/clusterissuer/app"), Retry: false, Wait: false},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/cloudnative-pg/app"), Retry: false, Wait: false},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/kube-system/node-feature-discovery/app"), Retry: false, Wait: false},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/kube-system/metrics-server/app"), Retry: false, Wait: false},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/volsync/app"), Retry: false, Wait: true},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/snapshot-controller/app"), Retry: false, Wait: true},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/openebs/app"), Retry: false, Wait: true},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/system/longhorn/app"), Retry: false, Wait: true},
-	}
-
-	if err := fluxhandler.InstallCharts(intermediateCharts, HelmRepos, true); err != nil {
-		return err
-	}
-
-	// Desired pod names
-	requiredMLBPods := []string{
-		"metallb-controller",
-		"metallb-speaker",
-	}
-
-	log.Info().Msgf("Bootstrap: Waiting for MetalLB Pods to be running for: %v", bootstrapNode)
-	if err := kubectlcmds.CheckStatus(requiredMLBPods, []string{}, 600); err != nil {
-		log.Error().Err(err).Msgf("Error: %v\n", err)
-
-		return fmt.Errorf("bootstrap failed: %w", err)
-	}
-
-	lateCharts := []fluxhandler.HelmChart{
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/core/metallb-config/app"), Retry: false, Wait: false},
-	}
-
-	log.Info().Msgf("Bootstrap: Loading VolumeSnapshotClasses")
-
-	for _, filePath := range VSCfilePaths {
-		log.Info().Msgf("Bootstrap: Loading VolumeSnapshotClass: %v", filePath)
-		if err := kubectlcmds.KubectlApply(ctx, filePath); err != nil {
-			log.Info().Msgf("Error applying manifest for %s: %v\n", filepath.Base(filePath), err)
-			return fmt.Errorf("bootstrap failed: %w", err)
-		}
-	}
-
-	if err := fluxhandler.InstallCharts(lateCharts, HelmRepos, true); err != nil {
-		return err
-	}
-
-	log.Info().Msg("Bootstrap: Installing included applications")
-	postCharts := []fluxhandler.HelmChart{
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/networking/nginx-internal/app"), Retry: false, Wait: true},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/networking/nginx-external/app"), Retry: false, Wait: true},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/core/blocky/app"), Retry: false, Wait: true},
-		{ChartPath: filepath.Join(helper.ClusterPath, "/kubernetes/observability/headlamp/app"), Retry: false, Wait: true},
-	}
-
-	if err := fluxhandler.InstallCharts(postCharts, HelmRepos, true); err != nil {
-		return err
-	}
-
-	log.Info().Msg("------")
-
-	if err := fluxhandler.FluxBootstrap(ctx); err != nil {
-		return err
-	}
-
-	log.Info().Msg("Bootstrap: Completed Successfully!")
-	return os.Remove(bootstrapStatePath())
+	for _, filePath := ra…1112 tokens truncated…Remove(bootstrapStatePath())
 }

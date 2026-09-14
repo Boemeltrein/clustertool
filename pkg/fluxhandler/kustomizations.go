@@ -68,7 +68,7 @@ resources:
     for _, file := range files {
         name := file.Name()
         // Ignore kustomization.yaml and ks.yaml files
-        if name == "kustomization.yaml" || name == "ks.yaml" {
+        if name == "kustomization.yaml" || name == "ks.yaml" || strings.HasSuffix(name, "sopssecret.secret.yaml") {
             continue
         }
         // Include only YAML files and directories

@@ -33,7 +33,7 @@ func GenConfig(args []string) error {
 	if err := talosconfig.Generate(); err != nil {
 		return err
 	}
-	if err := initfiles.UpdateGitRepo(); err != nil {
+	if err := initfiles.UpdateFluxConfig(); err != nil {
 		return err
 	}
 

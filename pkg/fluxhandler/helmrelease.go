@@ -36,6 +36,7 @@ type Chart struct {
 }
 
 type Spec struct {
+	ChartRef    *SourceRef             `yaml:"chartRef,omitempty"`
 	Interval    string                 `yaml:"interval,omitempty"`
 	Chart       Chart                  `yaml:"chart,omitempty"`
 	ReleaseName string                 `yaml:"releaseName,omitempty"`
@@ -86,16 +87,16 @@ func InstallCharts(charts []HelmChart, repos map[string]*HelmRepo, async bool) e
 		if release == nil {
 			return fmt.Errorf("empty Helm release: %s", chart.ChartPath)
 		}
-		repo := repos[release.Spec.Chart.Spec.SourceRef.Name]
-		if repo == nil || repo.Spec.URL == "" {
-			return fmt.Errorf("missing Helm repository for %s", chart.ChartPath)
+		source, err := ResolveChart(release, repos, filepath.Join("repositories", "oci"))
+		if err != nil {
+			return fmt.Errorf("chart %s: %w", release.Metadata.Name, err)
 		}
 		name := release.Metadata.Name
 		if release.Spec.ReleaseName != "" {
 			name = release.Spec.ReleaseName
 		}
 		log.Info().Msgf("Bootstrap: Installing %s", release.Metadata.Name)
-		if err := HelmInstall(repo.Spec.URL, release.Spec.Chart.Spec.Chart, name, release.Metadata.Namespace, filepath.Join(chart.ChartPath, "values.yaml"), release.Spec.Chart.Spec.Version, chart.Retry, chart.Wait, true); err != nil {
+		if err := HelmInstall(source.URL, source.Chart, name, release.Metadata.Namespace, filepath.Join(chart.ChartPath, "values.yaml"), source.Version, chart.Retry, chart.Wait, true); err != nil {
 			return fmt.Errorf("install chart %s: %w", name, err)
 		}
 		return nil

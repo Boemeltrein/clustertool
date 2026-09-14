@@ -43,7 +43,7 @@ func InitFiles() error {
 	if err := GenTalEnvConfigMap(); err != nil {
 		return err
 	}
-	if err := UpdateGitRepo(); err != nil {
+	if err := UpdateFluxConfig(); err != nil {
 		return err
 	}
 	if err := fluxhandler.CreateGitSecret(helper.TalEnv["GITHUB_REPOSITORY"]); err != nil {
@@ -69,9 +69,6 @@ func InitFiles() error {
 func genKubernetes() error {
 	if err := fthelper.CopyDir(helper.KubeCache, helper.ClusterPath+"/kubernetes", false); err != nil {
 		return fmt.Errorf("copy Kubernetes files: %w", err)
-	}
-	if err := fthelper.ReplaceInFile(path.Join(helper.ClusterPath, "kubernetes/flux-entry.yaml"), "REPLACEWITHCLUSTERNAME", helper.ClusterName); err != nil {
-		return fmt.Errorf("update Flux entry: %w", err)
 	}
 	log.Info().Msg("Kubernetes files copied successfully.")
 	return nil
@@ -116,19 +113,30 @@ func GenTalEnvConfigMap() error {
 	return nil
 }
 
-func UpdateGitRepo() error {
-	if helper.TalEnv["GITHUB_REPOSITORY"] != "" {
-		repoPath := filepath.Join("repositories", "git", "this-repo.yaml")
-		if _, err := os.Stat(repoPath); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				log.Warn().Msgf("Skipping Git repository update: %s does not exist", filepath.ToSlash(repoPath))
-				return nil
-			}
-			return fmt.Errorf("check Git repository file %s: %w", repoPath, err)
+// UpdateFluxConfig renders template placeholders without overwriting user settings.
+func UpdateFluxConfig() error {
+	files := []string{
+		filepath.Join(helper.ClusterPath, "flux-entry", "ks.yaml"),
+		filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux-operator", "ks.yaml"),
+		filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux-instance", "ks.yaml"),
+		filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux-instance", "app", "helm-release.yaml"),
+	}
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
 		}
-		gitrepo := FormatGitURL(helper.TalEnv["GITHUB_REPOSITORY"])
-		if err := fthelper.ReplaceInFile(repoPath, "ssh://REPLACEWITHGITREPO", gitrepo); err != nil {
-			return fmt.Errorf("update Git repository file %s: %w", repoPath, err)
+		if err != nil {
+			return fmt.Errorf("read Flux configuration %s: %w", file, err)
+		}
+		content := strings.ReplaceAll(string(data), "REPLACEWITHCLUSTERNAME", helper.ClusterName)
+		if repo := helper.TalEnv["GITHUB_REPOSITORY"]; repo != "" {
+			content = strings.ReplaceAll(content, "ssh://REPLACEWITHGITREPO", FormatGitURL(repo))
+		}
+		if content != string(data) {
+			if err := os.WriteFile(file, []byte(content), 0644); err != nil {
+				return fmt.Errorf("render Flux configuration %s: %w", file, err)
+			}
 		}
 	}
 	return nil
@@ -426,7 +434,7 @@ func GetSecKey() (string, error) {
 }
 
 func GenSopsSecret() error {
-	secretPath := filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux", "sopssecret.secret.yaml")
+	secretPath := filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux-instance", "app", "sopssecret.secret.yaml")
 	ageSecKey, err := GetSecKey()
 
 	// Added by Boemeltrein, for linting purposes
