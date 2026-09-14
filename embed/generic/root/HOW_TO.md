@@ -1,8 +1,13 @@
-# ClusterTool: native Talos configuration
+# ClusterTool v5.0: 
 
+**Native Talos configuration**
 This major version uses native Talos 1.14 configuration documents instead of
 Talhelper. Use the new layout below; configuration from older ClusterTool versions
 is not converted automatically. Run the commands from your cluster repository root.
+
+**Flux Operator**
+Flux Operator replaces the previous Flux manifest installation. A FluxInstance
+defines the Flux controllers and the Git repository they synchronize.
 
 ## Before you start
 
@@ -11,18 +16,6 @@ is not converted automatically. Run the commands from your cluster repository ro
 Before starting, verify that your VolSync backups and CloudNativePG (CNPG)
 backups are available and accessible, and that you have the credentials required
 to restore them.
-
-You can reuse your existing Git repository for the new cluster, but **do not run
-`clustertool init` in that repository**. Instead:
-
-1. Run `clustertool init` in a temporary directory, complete `clusterenv.yaml`,
-   then run `clustertool init` again and `clustertool genconfig`.
-2. Copy the new Talos configuration structure, including
-   `clusters/main/talos/secrets.sops.yaml`, into your existing repository.
-3. Remove the old Talhelper configuration, generated files and old cluster
-   secrets. Keep the newly generated secrets.
-4. Adjust the node configuration and the Longhorn/OpenEBS values described below
-   before bootstrapping.
 
 This procedure creates a new cluster; it does not migrate an existing running
 cluster or its storage data.
@@ -73,7 +66,6 @@ Run `clustertool init`, fill in `clusters/main/clusterenv.yaml`, then run
 
 ```text
 clusters/main/talos/
-├── README.md
 ├── clustertool.yaml
 ├── secrets.sops.yaml
 ├── patches/
@@ -166,6 +158,50 @@ continues with the other charts and Flux.
 If setup is interrupted, run apply again. When a matching
 `.bootstrap-in-progress.json` exists, ClusterTool asks whether to resume.
 The file is removed after successful setup. Keep the original cluster secrets.
+
+## Flux Operator
+
+Set `GITHUB_REPOSITORY` in `clusters/main/clusterenv.yaml` before completing
+`init`. Add the generated `ssh-public-key.txt` to that repository's deploy keys;
+read-only access is sufficient. Run `clustertool genconfig` and
+`clustertool encrypt`, then commit and push the configuration before accepting
+the Flux bootstrap prompt.
+
+At the end of a new Talos bootstrap, ClusterTool asks whether to bootstrap Flux.
+It applies the required secrets, installs the Flux Operator chart and waits for
+the operator to be ready, then installs the FluxInstance chart. To start this
+separately on an existing cluster:
+
+```sh
+clustertool flux bootstrap
+```
+
+The configuration is in:
+
+- `clusters/main/kubernetes/flux-system/flux-operator/app/helm-release.yaml`:
+  operator settings.
+- `clusters/main/kubernetes/flux-system/flux-instance/app/helm-release.yaml`:
+  Flux controllers and `spec.values.instance.sync` settings. The default Git branch
+  is `refs/heads/main`; change it if your repository uses another branch.
+- `clusters/main/flux-entry/ks.yaml`: entry points for repositories and cluster
+  resources.
+- `repositories/oci/flux-operator.yaml` and `flux-instance.yaml`: chart versions
+  in `spec.ref.tag`.
+
+Under `clusters/main/kubernetes/`, `init` creates both credential files in
+`flux-system/flux-instance/app/`:
+`deploykey.secret.yaml` holds the Git deploy key and must be encrypted before
+committing. `sopssecret.secret.yaml` holds the private age key; it is ignored by Git,
+excluded from Kustomizations and applied directly during Flux bootstrap.
+Cluster settings remain in `flux-system/flux/clustersettings.secret.yaml`.
+
+After chart installation, Flux continues synchronizing in the background. Check
+its status with:
+
+```sh
+kubectl -n flux-system get fluxinstances
+kubectl -n flux-system get gitrepositories,kustomizations,helmreleases
+```
 
 ## Change an image or upgrade
 

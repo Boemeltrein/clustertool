@@ -32,9 +32,9 @@ After this is done, we apply a number of helm-charts and manifests by default su
 - Certificate-Approver
 - Headlamp
 
-### Bootstrapping FluxCD
+### Bootstrapping Flux
 
-During Bootstrapping, if a "GITHUB_REPOSITORY" is set in "clusterenv.yaml", you will be asked if you also want to bootstrap FluxCD, checkout the getting-started guide for more info
+During Bootstrapping, if a "GITHUB_REPOSITORY" is set in "clusterenv.yaml", you will be asked if you also want to bootstrap Flux, checkout the getting-started guide for more info
 
 ## About Bootstrapping
 
