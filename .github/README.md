@@ -3,7 +3,7 @@
 
 # Clustertool
 
-Bootstrap and manage reproducible Kubernetes clusters using GitOps, Talos Linux and FluxCD.
+Bootstrap and manage reproducible Kubernetes clusters using GitOps, Talos Linux and Flux.
 
 [![GitHub release (release name instead of tag name)](https://img.shields.io/github/v/release/trueforge-org/clustertool?style=for-the-badge)](https://github.com/trueforge-org/clustertool/releases) 
 
@@ -20,7 +20,7 @@ Built around GitOps principles, ClusterTool automates the setup of:
 
 * Talos Linux
 * Kubernetes
-* FluxCD
+* Flux Operator
 * OCI-based Helm repositories
 * TrueCharts integration
 * Git-managed cluster state
@@ -31,7 +31,7 @@ ClusterTool provides opinionated workflows used throughout the TrueForge ecosyst
 * ⚡ Fast Kubernetes cluster bootstrap
 * 🔄 Fully GitOps-driven workflows
 * ☸️ Native Talos Linux integration
-* 📦 FluxCD automation
+* 📦 Flux automation
 * 🧩 OCI Helm repository support
 * 🔐 SOPS-compatible secret workflows
 * 🏠 Homelab-friendly architecture

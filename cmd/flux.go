@@ -7,13 +7,13 @@ import (
 )
 
 var fluxLongHelp = strings.TrimSpace(`
-These are all commands that can be used to maintain FluxCD
+These are all commands that can be used to maintain Flux
 
 `)
 
 var fluxCmd = &cobra.Command{
 	Use:           "flux",
-	Short:         "Commands for handling FluxCD",
+	Short:         "Commands for handling Flux",
 	Example:       "clustertool flux bootstrap",
 	Long:          fluxLongHelp,
 	SilenceUsage:  true,

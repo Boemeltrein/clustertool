@@ -23,7 +23,7 @@ func FluxBootstrap(ctx context.Context) error {
 		return nil
 	}
 	log.Info().Msg("GITHUB_Repository for Flux configured.")
-	if !fthelper.GetYesOrNo("Do you want to (re)bootstrap Flux? [y/n]: ", false) {
+	if !fthelper.GetYesOrNo("Do you want to bootstrap Flux? [y/n]: ", false) {
 		return nil
 	}
 	if err := bootstrapFluxCD(ctx); err != nil {

@@ -18,7 +18,7 @@ Run genconfig and push your configuration to Git before bootstrapping.
 
 var fluxbootstrap = &cobra.Command{
 	Use:     "bootstrap",
-	Short:   "Manually bootstrap fluxcd on existing cluster",
+	Short:   "Manually bootstrap Flux on existing cluster",
 	Example: "clustertool flux bootstrap",
 	Long:    fluxBootstrapLongHelp,
 	RunE: func(cmd *cobra.Command, args []string) error {
