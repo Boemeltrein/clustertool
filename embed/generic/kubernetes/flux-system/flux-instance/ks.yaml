@@ -8,7 +8,7 @@ spec:
   dependsOn:
     - name: flux-operator
       namespace: flux-system
-  interval: 1h
+  interval: 10m
   path: clusters/REPLACEWITHCLUSTERNAME/kubernetes/flux-system/flux-instance/app
   prune: true
   sourceRef:
