@@ -17,9 +17,13 @@ type HelmRepoMetadata struct {
 type HelmRepoSpec struct {
     Interval string `yaml:"interval,omitempty"`
     URL      string `yaml:"url,omitempty"`
+    Ref      struct {
+        Tag string `yaml:"tag,omitempty"`
+    } `yaml:"ref,omitempty"`
 }
 
 type HelmRepo struct {
+    Kind     string           `yaml:"kind,omitempty"`
     Metadata HelmRepoMetadata `yaml:"metadata,omitempty"`
     Spec     HelmRepoSpec     `yaml:"spec,omitempty"`
 }

@@ -27,7 +27,7 @@ HEADLAMP_IP: 192.168.20.214
 DOMAIN_0: ""
 DOMAIN_0_EMAIL: ""
 DOMAIN_0_CLOUDFLARE_TOKEN: ""
-# Used to automatically generate a sshkey-pair for FluxCD
+# Used to automatically generate a sshkey-pair for Flux
 # Has to start with ssh://
 # Please make sure to NOT contain any special characters in the URL except "-"
 GITHUB_REPOSITORY: ""

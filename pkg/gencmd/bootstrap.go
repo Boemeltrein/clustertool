@@ -22,8 +22,6 @@ var HelmRepos map[string]*fluxhandler.HelmRepo
 func RunBootstrap(args []string) error {
 	extraArgs := args
 	manifestPaths := []string{
-		filepath.Join(helper.KubernetesPath, "flux-system", "flux", "sopssecret.secret.yaml"),
-		filepath.Join(helper.KubernetesPath, "flux-system", "flux", "deploykey.secret.yaml"),
 		filepath.Join(helper.KubernetesPath, "flux-system", "flux", "clustersettings.secret.yaml"),
 	}
 
