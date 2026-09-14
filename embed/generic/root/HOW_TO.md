@@ -1,8 +1,11 @@
-# ClusterTool: native Talos configuration
+# ClusterTool v5.0: 
 
+**Native Talos configuration**
 This major version uses native Talos 1.14 configuration documents instead of
 Talhelper. Use the new layout below; configuration from older ClusterTool versions
 is not converted automatically. Run the commands from your cluster repository root.
+
+**Flux Operator**
 
 ## Before you start
 
@@ -11,18 +14,6 @@ is not converted automatically. Run the commands from your cluster repository ro
 Before starting, verify that your VolSync backups and CloudNativePG (CNPG)
 backups are available and accessible, and that you have the credentials required
 to restore them.
-
-You can reuse your existing Git repository for the new cluster, but **do not run
-`clustertool init` in that repository**. Instead:
-
-1. Run `clustertool init` in a temporary directory, complete `clusterenv.yaml`,
-   then run `clustertool init` again and `clustertool genconfig`.
-2. Copy the new Talos configuration structure, including
-   `clusters/main/talos/secrets.sops.yaml`, into your existing repository.
-3. Remove the old Talhelper configuration, generated files and old cluster
-   secrets. Keep the newly generated secrets.
-4. Adjust the node configuration and the Longhorn/OpenEBS values described below
-   before bootstrapping.
 
 This procedure creates a new cluster; it does not migrate an existing running
 cluster or its storage data.
