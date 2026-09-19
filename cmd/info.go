@@ -20,6 +20,7 @@ Workflow:
   > clustertool init
   > clustertool genconfig
   > clustertool genks
+  > clustertool githook
 
 `)
 

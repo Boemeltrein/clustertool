@@ -28,7 +28,9 @@ func GenConfig(args []string) error {
 	if err := talosconfig.Generate(); err != nil {
 		return err
 	}
-	helper.CreateEncrPreCommitHook()
+	if err := helper.CreateEncrPreCommitHook(); err != nil {
+		return err
+	}
 	log.Info().Msg("GenConfig: Completed Successfully!")
 	return nil
 }

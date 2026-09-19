@@ -159,6 +159,15 @@ If setup is interrupted, run apply again. When a matching
 `.bootstrap-in-progress.json` exists, ClusterTool asks whether to resume.
 The file is removed after successful setup. Keep the original cluster secrets.
 
+## Restore the Git hook
+
+Run `clustertool githook` from your cluster repository root after switching
+environments or rebuilding a devcontainer. ClusterTool refreshes its embedded
+tools in the local cache and replaces `.git/hooks/pre-commit` with a hook pointing
+to the current environment's precommit binary. Commits remain blocked if that
+binary is missing or fails. `init` and `genconfig` also install the hook and now
+report installation errors instead of reporting success.
+
 ## Generate Kustomizations
 
 `init` prepares Flux placeholders and Kustomizations. After init, maintain these

@@ -56,7 +56,9 @@ func InitFiles() error {
 	}
 	log.Info().Msg("Kustomizations processed successfully.")
 
-	helper.CreateEncrPreCommitHook()
+	if err := helper.CreateEncrPreCommitHook(); err != nil {
+		return err
+	}
 	log.Info().Msg("Init: Completed Successfully!")
 	return nil
 }
