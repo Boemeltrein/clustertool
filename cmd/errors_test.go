@@ -90,6 +90,28 @@ func TestCommandsStopOnDecryptError(t *testing.T) {
 	}
 }
 
+func TestGitHookCommandExitCodes(t *testing.T) {
+	dir := t.TempDir()
+	hooks := filepath.Join(dir, ".git", "hooks")
+	if err := os.MkdirAll(hooks, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := commandProcess(t, dir, "githook"); err != nil {
+		t.Fatalf("hook installation failed: %v %s", err, out)
+	}
+	hook := filepath.Join(hooks, "pre-commit")
+	if err := os.Remove(hook); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(hook, 0755); err != nil {
+		t.Fatal(err)
+	}
+	out, err := commandProcess(t, dir, "githook")
+	if err == nil || !bytes.Contains(out, []byte("could not create pre-commit hook file")) || bytes.Contains(out, []byte("Pre-commit hook created successfully")) {
+		t.Fatalf("expected failed installation to stop the command: %v %s", err, out)
+	}
+}
+
 func TestEncryptionCommandExitCodes(t *testing.T) {
 	for _, name := range []string{"encrypt", "decrypt"} {
 		dir := t.TempDir()

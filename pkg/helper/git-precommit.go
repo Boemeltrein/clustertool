@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -92,11 +93,9 @@ func writeHookScript(hookPath, hookScript string) error {
 	if err != nil {
 		return fmt.Errorf("could not create pre-commit hook file: %v", err)
 	}
-	defer file.Close()
-
-	_, err = hookWriteStringFn(file, hookScript)
-	if err != nil {
-		return fmt.Errorf("could not write to pre-commit hook file: %v", err)
+	_, writeErr := hookWriteStringFn(file, hookScript)
+	if err := errors.Join(writeErr, file.Close()); err != nil {
+		return fmt.Errorf("could not write pre-commit hook %s: %w", hookPath, err)
 	}
 
 	return nil
@@ -123,8 +122,10 @@ func getPreCommitHookPath(dir string) string {
 
 func buildPreCommitHookScript(dir string) (string, error) {
 	goModPath := filepath.Join(dir, "go.mod")
-	if _, err := hookStatFn(goModPath); !os.IsNotExist(err) {
+	if _, err := hookStatFn(goModPath); err == nil {
 		return buildGoRunHookScript(), nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("could not check %s: %w", goModPath, err)
 	}
 
 	scriptPath := filepath.Join(CacheDir, "precommit")

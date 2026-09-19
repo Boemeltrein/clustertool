@@ -86,6 +86,8 @@ func TestRootCommandSnapshot(t *testing.T) {
 		"encrypt",
 		"flux",
 		"genconfig",
+		"genks",
+		"githook",
 		"info",
 		"init",
 		"precommit",

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -48,16 +47,18 @@ func InitFiles() error {
 	if err := GenSopsSecret(); err != nil {
 		return err
 	}
-	if err := fluxhandler.ProcessDirectory(path.Join(helper.ClusterPath, "kubernetes")); err != nil {
+	if err := fluxhandler.ProcessDirectory(helper.KubernetesPath); err != nil {
 		return err
 	}
-	if err := fluxhandler.ProcessDirectory(path.Join(helper.ClusterPath, "kubernetes")); err != nil {
+	// The second pass lets parent directories reference newly created ks.yaml files.
+	if err := fluxhandler.ProcessDirectory(helper.KubernetesPath); err != nil {
 		return err
-	} else {
-		log.Info().Msg("Kustomizations processed successfully.")
 	}
+	log.Info().Msg("Kustomizations processed successfully.")
 
-	helper.CreateEncrPreCommitHook()
+	if err := helper.CreateEncrPreCommitHook(); err != nil {
+		return err
+	}
 	log.Info().Msg("Init: Completed Successfully!")
 	return nil
 }
