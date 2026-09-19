@@ -2,11 +2,9 @@ package gencmd
 
 import (
 	"fmt"
-	"path"
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/trueforge-org/clustertool/pkg/fluxhandler"
 	"github.com/trueforge-org/clustertool/pkg/helper"
 	"github.com/trueforge-org/clustertool/pkg/initfiles"
 	"github.com/trueforge-org/clustertool/pkg/sops"
@@ -29,18 +27,6 @@ func GenConfig(args []string) error {
 	}
 	if err := talosconfig.Generate(); err != nil {
 		return err
-	}
-	if err := initfiles.UpdateFluxConfig(); err != nil {
-		return err
-	}
-
-	if err := fluxhandler.ProcessDirectory(path.Join(helper.ClusterPath, "kubernetes")); err != nil {
-		return err
-	}
-	if err := fluxhandler.ProcessDirectory(path.Join(helper.ClusterPath, "kubernetes")); err != nil {
-		return err
-	} else {
-		log.Info().Msgf("Kustomizations processed successfully.")
 	}
 	helper.CreateEncrPreCommitHook()
 	log.Info().Msg("GenConfig: Completed Successfully!")
