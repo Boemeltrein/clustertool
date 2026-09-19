@@ -7,15 +7,6 @@ import (
 	"testing"
 )
 
-func TestHookPropagatesGoModStatError(t *testing.T) {
-	old := hookStatFn
-	t.Cleanup(func() { hookStatFn = old })
-	hookStatFn = func(string) (os.FileInfo, error) { return nil, os.ErrPermission }
-	if _, err := buildPreCommitHookScript(t.TempDir()); !errors.Is(err, os.ErrPermission) {
-		t.Fatalf("expected permission error, got %v", err)
-	}
-}
-
 func TestHookPropagatesWriteAndCloseErrors(t *testing.T) {
 	old := hookWriteStringFn
 	t.Cleanup(func() { hookWriteStringFn = old })

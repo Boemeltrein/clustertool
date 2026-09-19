@@ -80,7 +80,7 @@ func CreateEncrPreCommitHook() error {
 
 func buildHookFileData(dir string) (string, string, error) {
 	hookPath := getPreCommitHookPath(dir)
-	hookScript, err := buildPreCommitHookScriptFn(dir)
+	hookScript, err := buildPreCommitHookScriptFn()
 	if err != nil {
 		return "", "", err
 	}
@@ -120,30 +120,9 @@ func getPreCommitHookPath(dir string) string {
 	return filepath.Join(hooksDir, "pre-commit")
 }
 
-func buildPreCommitHookScript(dir string) (string, error) {
-	goModPath := filepath.Join(dir, "go.mod")
-	if _, err := hookStatFn(goModPath); err == nil {
-		return buildGoRunHookScript(), nil
-	} else if !os.IsNotExist(err) {
-		return "", fmt.Errorf("could not check %s: %w", goModPath, err)
-	}
-
+func buildPreCommitHookScript() (string, error) {
 	scriptPath := filepath.Join(CacheDir, "precommit")
 	return buildExecutableHookScript(scriptPath), nil
-}
-
-func buildGoRunHookScript() string {
-	return `#!/bin/sh
-# Pre-commit hook script
-
-# Use go run . checkcrypt if go.mod exists
-echo "Running pre-commit encryption check..."
-# go run . checkcrypt
-if [ $? -ne 0 ]; then
-    echo "Pre-commit encryption check failed. Commit aborted."
-    exit 1
-fi
-`
 }
 
 func buildExecutableHookScript(scriptPath string) string {
