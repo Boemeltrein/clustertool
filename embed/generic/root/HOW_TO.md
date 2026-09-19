@@ -159,6 +159,21 @@ If setup is interrupted, run apply again. When a matching
 `.bootstrap-in-progress.json` exists, ClusterTool asks whether to resume.
 The file is removed after successful setup. Keep the original cluster secrets.
 
+## Generate Kustomizations
+
+`init` prepares Flux placeholders and Kustomizations. After init, maintain these
+files yourself; `genconfig` and `talos apply` no longer update them.
+To optionally create missing `ks.yaml` files and add resources to
+`kustomization.yaml` files under `clusters/<cluster>/kubernetes`, run:
+
+```sh
+clustertool genks
+clustertool genks --cluster main
+```
+
+`kustomizations` is an alias for `genks`. Existing `ks.yaml` files are preserved.
+Review the generated changes before committing.
+
 ## Flux Operator
 
 Set `GITHUB_REPOSITORY` in `clusters/main/secrets/cluster-settings.sops.yaml` before completing
