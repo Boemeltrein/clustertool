@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -26,7 +25,7 @@ import (
 var errInitialSetup = errors.New("initial environment setup required")
 
 func InitFiles() error {
-	for _, step := range []func() error{removeRunAgainFile, ageGen, genRootFiles, genBaseFiles, UpdateRootFiles, UpdateBaseFiles} {
+	for _, step := range []func() error{removeRunAgainFile, ageGen, genRootFiles, genBaseFiles, CheckEnvVariables} {
 		if err := step(); err != nil {
 			if errors.Is(err, errInitialSetup) {
 				return nil
@@ -38,9 +37,6 @@ func InitFiles() error {
 		return err
 	}
 	if err := genKubernetes(); err != nil {
-		return err
-	}
-	if err := GenTalEnvConfigMap(); err != nil {
 		return err
 	}
 	if err := UpdateFluxConfig(); err != nil {
@@ -74,48 +70,10 @@ func genKubernetes() error {
 	return nil
 }
 
-func GenTalEnvConfigMap() error {
-	log.Info().Msg("Creating TalEnv configmap reference 'clustersettings'.")
-	// Read the content of the talenv.yaml file
-	talenvContent, err := os.ReadFile(helper.ClusterEnvFile)
-	if err != nil {
-		return err
-	}
-
-	// Convert the file content to a string and split it into lines
-	talenvLines := strings.Split(string(talenvContent), "\n")
-
-	// Add indentation to each line
-	for i, line := range talenvLines {
-		talenvLines[i] = "  " + line
-	}
-	indentClusterName := "  CLUSTERNAME: " + helper.ClusterName
-	talenvLines = append(talenvLines, indentClusterName)
-
-	// Join the indented lines back into a single string
-	indentedTalenvContent := strings.Join(talenvLines, "\n")
-
-	clusterSettings := filepath.Join("flux-system", "flux", "clustersettings.secret.yaml")
-	clusterSettingsDest := filepath.Join(helper.ClusterPath+"/kubernetes", clusterSettings)
-	clusterSettingsSrc := filepath.Join(helper.KubeCache, clusterSettings)
-	if err := os.MkdirAll(filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux"), os.ModePerm); err != nil {
-		return err
-	}
-	if err := fthelper.CopyFile(clusterSettingsSrc, clusterSettingsDest, true); err != nil {
-		return fmt.Errorf("copy cluster settings: %w", err)
-	}
-	log.Debug().Msgf("clusterSettingsDest %v", clusterSettingsDest)
-	err = fthelper.ReplaceInFile(clusterSettingsDest, "REPLACEWITHENV", indentedTalenvContent)
-	if err != nil {
-		return fmt.Errorf("render cluster settings %s: %w", clusterSettingsDest, err)
-	}
-	log.Info().Msg("Configmap reference Created.")
-	return nil
-}
-
 // UpdateFluxConfig renders template placeholders without overwriting user settings.
 func UpdateFluxConfig() error {
 	files := []string{
+		filepath.Join(helper.ClusterPath, "kubernetes", "kube-system", "cilium", "app", "helm-release.yaml"),
 		filepath.Join(helper.ClusterPath, "flux-entry", "ks.yaml"),
 		filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux-operator", "ks.yaml"),
 		filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux-instance", "ks.yaml"),
@@ -176,18 +134,18 @@ func FormatGitURL(input string) string {
 }
 
 func genBaseFiles() error {
-	clusterEnvPresent := false
+	clusterSettingsPresent := false
 
-	if _, err := os.Stat(helper.ClusterEnvFile); err == nil {
-		clusterEnvPresent = true
+	if _, err := os.Stat(helper.ClusterSettingsFile); err == nil {
+		clusterSettingsPresent = true
 		log.Debug().Msg("Detected existing cluster, continuing")
 	} else if os.IsNotExist(err) {
 		if err := createRunAgainFile(); err != nil {
 			return err
 		}
-		log.Warn().Msg("New cluster detected, creating clusterenv.yaml\n Please fill out ClusterEnv.yaml and run init again, after setting-up clusterenv.yaml!")
+		log.Warn().Msg("Fill in secrets/cluster-settings.sops.yaml, then run init again.")
 	} else {
-		return fmt.Errorf("check cluster environment %s: %w", helper.ClusterEnvFile, err)
+		return fmt.Errorf("check cluster settings %s: %w", helper.ClusterSettingsFile, err)
 	}
 
 	err := fthelper.CopyDir(helper.BaseCache, helper.ClusterPath+"", false)
@@ -197,11 +155,10 @@ func genBaseFiles() error {
 		log.Info().Msg("Base files copied successfully.")
 	}
 
-	if !clusterEnvPresent {
+	if !clusterSettingsPresent {
 		return errInitialSetup
 	}
 
-	log.Info().Msg("basefiles successfully altered.")
 	return nil
 }
 
@@ -234,32 +191,6 @@ func CheckRunAgainFileExists() bool {
 	return !os.IsNotExist(err)
 }
 
-func UpdateBaseFiles() error {
-	log.Info().Msgf("Updating base files for cluster: %s", helper.ClusterPath)
-	// Read filenames in source directory
-	sourceFiles, err := readFilenamesInDir(helper.BaseCache)
-	if err != nil {
-		return fmt.Errorf("read template directory: %w", err)
-	}
-
-	// Process each file in the target directory
-	for _, filename := range sourceFiles {
-		sourceFilePath := filepath.Join(helper.BaseCache, filename)
-		targetFilePath := filepath.Join(helper.ClusterPath+"", fthelper.ReplaceDotInFilename(filename))
-		if err := fthelper.ReplaceContentBetweenLines(targetFilePath, sourceFilePath, "## Do not edit between this and DO NOT REMOVE", "## DO NOT REMOVE: Personal setting go under this line"); err != nil {
-			return fmt.Errorf("update %s: %w", targetFilePath, err)
-		}
-	}
-	log.Info().Msg("basefiles successfully updated.")
-
-	if err := CheckEnvVariables(); err != nil {
-		return err
-	}
-
-	return nil
-
-}
-
 func genRootFiles() error {
 	if err := fthelper.CopyDir(helper.RootCache, "./", false); err != nil {
 		return fmt.Errorf("copy root files: %w", err)
@@ -273,57 +204,6 @@ func genRootFiles() error {
 	}
 	log.Info().Msg("Root files copied successfully.")
 	return nil
-}
-
-func UpdateRootFiles() error {
-	// Read filenames in source directory
-	sourceFiles, err := readFilenamesInDir(helper.RootCache)
-	if err != nil {
-		return fmt.Errorf("read template directory: %w", err)
-	}
-
-	// Process each file in the target directory
-	for _, filename := range sourceFiles {
-		sourceFilePath := filepath.Join(helper.RootCache, filename)
-		targetFilePath := filepath.Join("./", fthelper.ReplaceDotInFilename(filename))
-		if err := fthelper.ReplaceContentBetweenLines(targetFilePath, sourceFilePath, "## Do not edit between this and DO NOT REMOVE", "## DO NOT REMOVE: Personal setting go under this line"); err != nil {
-			return fmt.Errorf("update %s: %w", targetFilePath, err)
-		}
-	}
-	log.Info().Msg("rootfiles successfully updated.")
-
-	agePubKey, err := GetPubKey()
-	if err != nil {
-		return fmt.Errorf("read age public key: %w", err)
-	}
-
-	err = fthelper.ReplaceInFile(".sops.yaml", "REPLACEME", agePubKey)
-	if err != nil {
-		return fmt.Errorf("configure .sops.yaml: %w", err)
-	}
-
-	if err := CheckEnvVariables(); err != nil {
-		return err
-	}
-
-	return nil
-
-}
-
-// Function to read all filenames in a directory
-func readFilenamesInDir(dir string) ([]string, error) {
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	var filenames []string
-	for _, file := range files {
-		if !file.IsDir() {
-			filenames = append(filenames, file.Name())
-		}
-	}
-	return filenames, nil
 }
 
 func ResetBootstrapValues() error {
@@ -434,7 +314,7 @@ func GetSecKey() (string, error) {
 }
 
 func GenSopsSecret() error {
-	secretPath := filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux-instance", "app", "sopssecret.secret.yaml")
+	secretPath := filepath.Join(helper.ClusterPath, "kubernetes", "flux-system", "flux-instance", "app", "sops-age.sops.yaml")
 	ageSecKey, err := GetSecKey()
 
 	// Added by Boemeltrein, for linting purposes
@@ -470,6 +350,6 @@ func GenSopsSecret() error {
 	if err != nil {
 		return fmt.Errorf("failed to write secret YAML to file: %w", err)
 	}
-	log.Info().Msgf("SOPS secret YAML saved to: %s\n", secretPath)
+	log.Info().Msgf("SOPS age-key Secret saved to: %s", secretPath)
 	return nil
 }
