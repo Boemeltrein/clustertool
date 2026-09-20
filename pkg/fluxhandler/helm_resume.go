@@ -7,23 +7,27 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/release"
-	"helm.sh/helm/v3/pkg/storage/driver"
+	"helm.sh/helm/v4/pkg/action"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/kube"
+	ri "helm.sh/helm/v4/pkg/release"
+	releasecommon "helm.sh/helm/v4/pkg/release/common"
+	release "helm.sh/helm/v4/pkg/release/v1"
+	"helm.sh/helm/v4/pkg/storage/driver"
 )
 
 // Resume does not change an existing release. A deployed Helm status alone
 // does not prove its workloads are ready, so retain the caller's wait policy.
 func resumeHelmRelease(config *action.Configuration, name string, wait bool) (bool, error) {
-	existing, err := action.NewGet(config).Run(name)
+	result, err := action.NewGet(config).Run(name)
 	if errors.Is(err, driver.ErrReleaseNotFound) {
 		return false, nil
 	}
 	if err != nil {
 		return false, fmt.Errorf("inspect release %s: %w", name, err)
 	}
-	if existing.Info == nil || existing.Info.Status != release.StatusDeployed {
+	existing := result.(*release.Release)
+	if existing.Info == nil || existing.Info.Status != releasecommon.StatusDeployed {
 		return true, fmt.Errorf("release %s already exists but is not deployed; resolve its Helm status before resuming bootstrap", name)
 	}
 	if wait {
@@ -31,7 +35,11 @@ func resumeHelmRelease(config *action.Configuration, name string, wait bool) (bo
 		if err != nil {
 			return true, fmt.Errorf("read resources for release %s: %w", name, err)
 		}
-		if err := config.KubeClient.Wait(resources, 15*time.Minute); err != nil {
+		waiter, err := config.KubeClient.GetWaiter(kube.StatusWatcherStrategy)
+		if err != nil {
+			return true, fmt.Errorf("wait for existing release %s: %w", name, err)
+		}
+		if err := waiter.Wait(resources, 15*time.Minute); err != nil {
 			return true, fmt.Errorf("wait for existing release %s: %w", name, err)
 		}
 	}
@@ -39,7 +47,7 @@ func resumeHelmRelease(config *action.Configuration, name string, wait bool) (bo
 	return true, nil
 }
 
-func installRelease(client *action.Install, chart *chart.Chart, values map[string]interface{}) (*release.Release, error) {
+func installRelease(client *action.Install, chart *chart.Chart, values map[string]interface{}) (ri.Releaser, error) {
 	result, err := client.Run(chart, values)
 	if err != nil {
 		// Helm can retain a failed/pending release after a timeout. Never issue
