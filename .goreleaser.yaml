@@ -25,7 +25,7 @@ archives:
         formats: [zip]
     files:
       - LICENSE
-      - src: "dist/build-info/{{ .Os }}_{{ .Arch }}/BUILD.txt"
+      - src: "{{ .Env.RUNNER_TEMP }}/clustertool-build-info/{{ .Os }}_{{ .Arch }}/BUILD.txt"
         dst: .
         strip_parent: true
 checksum:
@@ -71,7 +71,7 @@ before:
     - bash ./embed/download_talosctl.sh
     - chmod +x ./partial_builds/partial_build.sh
     - bash ./partial_builds/partial_build.sh
-    - bash ./.github/scripts/build-info.sh "{{ .Version }}" "{{ .FullCommit }}" "dist/build-info"
+    - bash ./.github/scripts/build-info.sh "{{ .Version }}" "{{ .FullCommit }}" "{{ .Env.RUNNER_TEMP }}/clustertool-build-info"
 
 # sboms:
 #   - artifacts: archive
