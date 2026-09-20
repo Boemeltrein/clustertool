@@ -6,36 +6,44 @@ import (
 	"testing"
 	"time"
 
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/kube"
-	"helm.sh/helm/v3/pkg/kube/fake"
-	"helm.sh/helm/v3/pkg/release"
-	"helm.sh/helm/v3/pkg/storage"
-	"helm.sh/helm/v3/pkg/storage/driver"
+	"helm.sh/helm/v4/pkg/action"
+	"helm.sh/helm/v4/pkg/chart/common"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/kube"
+	"helm.sh/helm/v4/pkg/kube/fake"
+	releasecommon "helm.sh/helm/v4/pkg/release/common"
+	release "helm.sh/helm/v4/pkg/release/v1"
+	"helm.sh/helm/v4/pkg/storage"
+	"helm.sh/helm/v4/pkg/storage/driver"
 )
 
 type readinessClient struct {
 	fake.PrintingKubeClient
+	fake.PrintingKubeWaiter
 	waits   int
 	creates int
 	err     error
 }
 
 func (c *readinessClient) Wait(_ kube.ResourceList, _ time.Duration) error { c.waits++; return c.err }
-func (c *readinessClient) Create(r kube.ResourceList) (*kube.Result, error) {
+func (c *readinessClient) GetWaiter(ws kube.WaitStrategy) (kube.Waiter, error) {
+	return c.GetWaiterWithOptions(ws)
+}
+func (c *readinessClient) GetWaiterWithOptions(_ kube.WaitStrategy, _ ...kube.WaitOption) (kube.Waiter, error) {
+	return c, nil
+}
+func (c *readinessClient) Create(r kube.ResourceList, opts ...kube.ClientCreateOption) (*kube.Result, error) {
 	c.creates++
-	return c.PrintingKubeClient.Create(r)
+	return c.PrintingKubeClient.Create(r, opts...)
 }
 func helmTestConfig() (*action.Configuration, *readinessClient) {
-	client := &readinessClient{PrintingKubeClient: fake.PrintingKubeClient{Out: io.Discard}}
-	return &action.Configuration{Releases: storage.Init(driver.NewMemory()), KubeClient: client, Capabilities: chartutil.DefaultCapabilities, Log: func(string, ...interface{}) {}}, client
+	client := &readinessClient{PrintingKubeClient: fake.PrintingKubeClient{Out: io.Discard}, PrintingKubeWaiter: fake.PrintingKubeWaiter{Out: io.Discard}}
+	return &action.Configuration{Releases: storage.Init(driver.NewMemory()), KubeClient: client, Capabilities: common.DefaultCapabilities}, client
 }
 
 func TestResumeChecksReadinessWithoutInstalling(t *testing.T) {
 	cfg, client := helmTestConfig()
-	rel := &release.Release{Name: "storage", Namespace: "test", Version: 1, Info: &release.Info{Status: release.StatusDeployed}, Manifest: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\n"}
+	rel := &release.Release{Name: "storage", Namespace: "test", Version: 1, Info: &release.Info{Status: releasecommon.StatusDeployed}, Manifest: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\n"}
 	if err := cfg.Releases.Create(rel); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +60,7 @@ func TestResumeChecksReadinessWithoutInstalling(t *testing.T) {
 	if _, err := resumeHelmRelease(cfg, "storage", true); !errors.Is(err, client.err) {
 		t.Fatal(err)
 	}
-	rel.Info.Status = release.StatusFailed
+	rel.Info.Status = releasecommon.StatusFailed
 	if err := cfg.Releases.Update(rel); err != nil {
 		t.Fatal(err)
 	}
@@ -70,9 +78,10 @@ func TestInstallTimeoutPreservesOriginalErrorAndRelease(t *testing.T) {
 	install := action.NewInstall(cfg)
 	install.ReleaseName = "storage"
 	install.Namespace = "test"
-	install.Wait = true
+	install.WaitStrategy = kube.LegacyStrategy
+	install.ServerSideApply = false
 	install.Timeout = time.Second
-	ch := &chart.Chart{Metadata: &chart.Metadata{Name: "storage", Version: "1.0.0", APIVersion: "v2"}, Templates: []*chart.File{{Name: "templates/cm.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\n")}}}
+	ch := &chart.Chart{Metadata: &chart.Metadata{Name: "storage", Version: "1.0.0", APIVersion: "v2"}, Templates: []*common.File{{Name: "templates/cm.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\n")}}}
 	_, err := installRelease(install, ch, nil)
 	if !errors.Is(err, client.err) {
 		t.Fatalf("lost original timeout: %v", err)
@@ -80,8 +89,8 @@ func TestInstallTimeoutPreservesOriginalErrorAndRelease(t *testing.T) {
 	if client.creates > 1 || client.waits != 1 {
 		t.Fatalf("install retried: creates=%d waits=%d", client.creates, client.waits)
 	}
-	rel, err := cfg.Releases.Get("storage", 1)
-	if err != nil || rel.Info.Status != release.StatusFailed {
+	result, err := cfg.Releases.Get("storage", 1)
+	if err != nil || result.(*release.Release).Info.Status != releasecommon.StatusFailed {
 		t.Fatalf("failed release not retained: %v", err)
 	}
 }

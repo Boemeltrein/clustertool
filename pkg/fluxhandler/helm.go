@@ -10,17 +10,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/zerologr"
 	"github.com/rs/zerolog/log"
 	"github.com/trueforge-org/clustertool/pkg/helper"
 	fthelper "github.com/trueforge-org/forgetool/v4/pkg/helper"
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/cli/values"
-	"helm.sh/helm/v3/pkg/getter"
-	"helm.sh/helm/v3/pkg/registry"
-	"helm.sh/helm/v3/pkg/release"
-	"helm.sh/helm/v3/pkg/repo"
+	"helm.sh/helm/v4/pkg/action"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/cli/values"
+	"helm.sh/helm/v4/pkg/getter"
+	"helm.sh/helm/v4/pkg/kube"
+	"helm.sh/helm/v4/pkg/registry"
+	releasecommon "helm.sh/helm/v4/pkg/release/common"
+	release "helm.sh/helm/v4/pkg/release/v1"
+	repo "helm.sh/helm/v4/pkg/repo/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
@@ -51,15 +55,14 @@ func HelmPull(repo string, name string, version string, dest string, silent bool
 	actionConfig := new(action.Configuration)
 
 	// Define logger based on the silent parameter
-	var logger func(string, ...interface{})
+	logger := zerologr.New(&log.Logger)
 	if silent {
-		logger = noOpLog
-	} else {
-		logger = log.Printf
+		logger = logr.Discard()
 	}
+	actionConfig.SetLogger(logr.ToSlogHandler(logger))
 
 	// Initialize actionConfig with the appropriate logger
-	if err := actionConfig.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"), logger); err != nil {
+	if err := actionConfig.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER")); err != nil {
 		return fmt.Errorf("failed to initialize Helm action config: %w", err)
 	}
 
@@ -69,7 +72,7 @@ func HelmPull(repo string, name string, version string, dest string, silent bool
 	}
 	actionConfig.RegistryClient = registryClient
 
-	client := action.NewPullWithOpts(action.WithConfig(actionConfig))
+	client := action.NewPull(action.WithConfig(actionConfig))
 	client.Settings = settings
 	client.RepoURL = repo
 	client.Version = version
@@ -129,8 +132,6 @@ func HelmPull(repo string, name string, version string, dest string, silent bool
 	return nil
 }
 
-func noOpLog(format string, v ...interface{}) {}
-
 // HelmInstall installs a Helm chart with provided parameters
 func HelmInstall(repoURL string, chartName string, releaseName string, namespace string, valuesFile string, version string, dryRun bool, wait bool, silent bool) error {
 	if dryRun {
@@ -143,16 +144,14 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 
 	settings.SetNamespace(namespace)
 
-	var logger func(string, ...interface{})
+	logger := zerologr.New(&log.Logger)
 	if silent {
-		logger = noOpLog
-
-	} else {
-		logger = log.Printf
+		logger = logr.Discard()
 	}
+	actionConfig.SetLogger(logr.ToSlogHandler(logger))
 
 	if err := actionConfig.Init(settings.RESTClientGetter(), namespace,
-		os.Getenv("HELM_DRIVER"), logger); err != nil {
+		os.Getenv("HELM_DRIVER")); err != nil {
 		return fmt.Errorf("failed to initialize Helm action config: %w", err)
 	}
 
@@ -199,9 +198,13 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 	client := action.NewInstall(actionConfig)
 	client.Namespace = namespace
 	client.ReleaseName = releaseName
-	client.DryRun = dryRun
+	client.DryRunStrategy = action.DryRunNone
 	client.Version = version
-	client.Wait = wait
+	client.ServerSideApply = false
+	client.WaitStrategy = kube.HookOnlyStrategy
+	if wait {
+		client.WaitStrategy = kube.LegacyStrategy
+	}
 	client.Timeout = 15 * time.Minute
 
 	tempValuesName := releaseName + "tempvalues.yaml"
@@ -260,10 +263,11 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 
 	// Install the chart with merged values
 	log.Debug().Msg("Installing chart...")
-	release, err := installRelease(client, chart, vals)
+	result, err := installRelease(client, chart, vals)
 	if err != nil {
 		return err
 	}
+	release := result.(*release.Release)
 
 	log.Printf("Installed Chart: %s in namespace: %s\n", release.Name, release.Namespace)
 	log.Printf("Installed Chart values: %v\n", release.Config)
@@ -297,15 +301,14 @@ func HelmUpgrade(repoURL string, chartName string, releaseName string, namespace
 
 	settings.SetNamespace(namespace)
 
-	var logger func(string, ...interface{})
+	logger := zerologr.New(&log.Logger)
 	if silent {
-		logger = noOpLog
-	} else {
-		logger = log.Printf
+		logger = logr.Discard()
 	}
+	actionConfig.SetLogger(logr.ToSlogHandler(logger))
 
 	if err := actionConfig.Init(settings.RESTClientGetter(), namespace,
-		os.Getenv("HELM_DRIVER"), logger); err != nil {
+		os.Getenv("HELM_DRIVER")); err != nil {
 		return fmt.Errorf("failed to initialize Helm action config: %w", err)
 	}
 
@@ -349,6 +352,8 @@ func HelmUpgrade(repoURL string, chartName string, releaseName string, namespace
 	client := action.NewUpgrade(actionConfig)
 	client.Namespace = namespace
 	client.Version = version
+	client.ServerSideApply = "false"
+	client.WaitStrategy = kube.HookOnlyStrategy
 
 	tempValuesName := releaseName + "tempvalues.yaml"
 	tempValuesPath := path.Join(workDir, tempValuesName)
@@ -404,10 +409,11 @@ func HelmUpgrade(repoURL string, chartName string, releaseName string, namespace
 	}
 
 	// Perform the upgrade with merged values
-	release, err := client.Run(releaseName, chart, vals)
+	result, err := client.Run(releaseName, chart, vals)
 	if err != nil {
 		return fmt.Errorf("failed to upgrade chart: %w", err)
 	}
+	release := result.(*release.Release)
 
 	if wait {
 		waitForRelease(actionConfig, release.Name, client.Namespace)
@@ -577,11 +583,12 @@ func repoURL(url string) string {
 func waitForRelease(actionConfig *action.Configuration, releaseName, namespace string) {
 	statusClient := action.NewStatus(actionConfig)
 	for {
-		rel, err := statusClient.Run(releaseName)
+		result, err := statusClient.Run(releaseName)
 		if err != nil {
 			log.Info().Msgf("failed to get release status: %v", err)
 		}
-		if rel.Info.Status == release.StatusDeployed {
+		rel := result.(*release.Release)
+		if rel.Info.Status == releasecommon.StatusDeployed {
 			log.Info().Msgf("Release %s is now deployed\n", releaseName)
 			break
 		}
