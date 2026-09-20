@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"bufio"
-	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/trueforge-org/clustertool/pkg/initfiles"
 	"github.com/trueforge-org/clustertool/pkg/sops"
-	"github.com/trueforge-org/clustertool/pkg/talosconfig"
 )
 
 var initLongHelp = strings.TrimSpace(`
@@ -27,17 +24,8 @@ var initFiles = &cobra.Command{
 	Long:    initLongHelp,
 	Example: "clustertool init",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !initfiles.CheckRunAgainFileExists() {
-			if _, err := os.Stat(talosconfig.SecretsPath()); err == nil {
-				fmt.Fprintln(cmd.OutOrStdout(), "WARNING: This cluster appears to have already been initialized.\nRunning init again may add or modify files.\n\nWe recommend initializing in a new folder and comparing the files\nwith your existing configuration.")
-				fmt.Fprint(cmd.OutOrStdout(), "\nContinue with init? [y/N]: ")
-				answer, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
-				if err != nil || strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					return fmt.Errorf("init cancelled")
-				}
-			} else if !os.IsNotExist(err) {
-				return fmt.Errorf("check Talos secrets: %w", err)
-			}
+		if err := initfiles.ConfirmInit(cmd.InOrStdin(), cmd.OutOrStdout()); err != nil {
+			return err
 		}
 		if err := sops.DecryptFiles(); err != nil {
 			// A missing SOPS config is expected during the first initialization.
