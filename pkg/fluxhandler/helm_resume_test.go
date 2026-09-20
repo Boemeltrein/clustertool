@@ -79,7 +79,7 @@ func TestInstallTimeoutPreservesOriginalErrorAndRelease(t *testing.T) {
 	install.ReleaseName = "storage"
 	install.Namespace = "test"
 	install.WaitStrategy = kube.LegacyStrategy
-	install.ServerSideApply = false
+	install.ServerSideApply = true
 	install.Timeout = time.Second
 	ch := &chart.Chart{Metadata: &chart.Metadata{Name: "storage", Version: "1.0.0", APIVersion: "v2"}, Templates: []*common.File{{Name: "templates/cm.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\n")}}}
 	_, err := installRelease(install, ch, nil)

@@ -200,7 +200,7 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 	client.ReleaseName = releaseName
 	client.DryRunStrategy = action.DryRunNone
 	client.Version = version
-	client.ServerSideApply = false
+	client.ServerSideApply = true
 	client.WaitStrategy = kube.HookOnlyStrategy
 	if wait {
 		client.WaitStrategy = kube.LegacyStrategy
@@ -352,7 +352,7 @@ func HelmUpgrade(repoURL string, chartName string, releaseName string, namespace
 	client := action.NewUpgrade(actionConfig)
 	client.Namespace = namespace
 	client.Version = version
-	client.ServerSideApply = "false"
+	client.ServerSideApply = "auto"
 	client.WaitStrategy = kube.HookOnlyStrategy
 
 	tempValuesName := releaseName + "tempvalues.yaml"
