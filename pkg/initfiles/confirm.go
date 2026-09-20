@@ -19,7 +19,7 @@ func ConfirmInit(in io.Reader, out io.Writer) error {
 		filepath.Join(helper.ClusterPath, "clusterenv.yaml"),
 	} {
 		if _, err := os.Stat(file); err == nil {
-			return fmt.Errorf("Legacy Talhelper-configured cluster found.\nInitialize ClusterTool 5 in a new folder.")
+			return fmt.Errorf("Legacy Talhelper-configured cluster found. Initialize ClusterTool 5 in a new folder.")
 		} else if !os.IsNotExist(err) {
 			return fmt.Errorf("check legacy configuration: %w", err)
 		}
