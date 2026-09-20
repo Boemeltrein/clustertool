@@ -61,9 +61,11 @@ func TestInitConfirmationBeforeDecryption(t *testing.T) {
 		marker, secrets, cancelled bool
 	}{
 		{"decline", "n\n", false, true, true},
-		{"default", "\n", false, true, true},
-		{"closed input", "", false, true, true},
+		{"empty then decline", "\nn\n", false, true, true},
+		{"invalid then accept", "invalid\ny\n", false, true, false},
 		{"accept", "y\n", false, true, false},
+		{"accept yes", "yes\n", false, true, false},
+		{"decline no", "no\n", false, true, true},
 		{"retry", "", true, true, false},
 		{"first init", "", false, false, false},
 	} {
@@ -93,6 +95,11 @@ func TestInitConfirmationBeforeDecryption(t *testing.T) {
 			out, err := process.CombinedOutput()
 			if err == nil {
 				t.Fatalf("expected cancellation or SOPS error: %s", out)
+			}
+			if strings.Contains(tc.input, "\n") && (strings.HasPrefix(tc.input, "\n") || strings.HasPrefix(tc.input, "invalid")) {
+				if !strings.Contains(string(out), "Invalid input. Please enter yes/no or y/n.") || strings.Count(string(out), "Continue with init? [y/n]:") != 2 {
+					t.Fatalf("expected another prompt after invalid input: %s", out)
+				}
 			}
 			if strings.Contains(string(out), "init cancelled") != tc.cancelled {
 				t.Fatalf("unexpected cancellation: %s", out)

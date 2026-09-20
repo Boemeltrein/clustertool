@@ -68,7 +68,7 @@ Init blocks legacy Talhelper-configured clusters. Initialize ClusterTool 5 in a 
 
 `RUNAGAIN` remains until init completes successfully, so a failed setup can be
 retried. If Talos secrets already exist and `RUNAGAIN` is absent, init warns before
-decrypting or changing repository files. Enter `y` to continue; the default is no.
+decrypting or changing repository files. Enter `y` or `yes` to continue, or `n` or `no` to cancel. Empty or invalid input repeats the question, as in Flux bootstrap.
 Prefer initializing in a new folder and comparing it with your existing configuration.
 
 ```text

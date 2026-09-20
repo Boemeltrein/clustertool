@@ -24,7 +24,7 @@ var initFiles = &cobra.Command{
 	Long:    initLongHelp,
 	Example: "clustertool init",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := initfiles.ConfirmInit(cmd.InOrStdin(), cmd.OutOrStdout()); err != nil {
+		if err := initfiles.ConfirmInit(); err != nil {
 			return err
 		}
 		if err := sops.DecryptFiles(); err != nil {
