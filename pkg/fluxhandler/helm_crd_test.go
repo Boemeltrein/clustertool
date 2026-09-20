@@ -118,15 +118,17 @@ func TestInstallWaitsForCRDRegistration(t *testing.T) {
 		name     string
 		strategy kube.WaitStrategy
 		waitErr  error
+		noCRDs   bool
 	}{
-		{"without workload waiting", kube.HookOnlyStrategy, nil},
-		{"with workload waiting", kube.StatusWatcherStrategy, nil},
-		{"registration fails", kube.HookOnlyStrategy, registrationErr},
+		{"without workload waiting", kube.HookOnlyStrategy, nil, false},
+		{"with workload waiting", kube.StatusWatcherStrategy, nil, false},
+		{"registration fails", kube.HookOnlyStrategy, registrationErr, false},
+		{"chart without CRDs", kube.HookOnlyStrategy, nil, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg, _ := helmTestConfig()
 			client := &crdRegistrationClient{PrintingKubeClient: fake.PrintingKubeClient{Out: io.Discard}, hookOnly: realHookOnlyWaiter(t), waitErr: tc.waitErr}
-			cfg.KubeClient = client
+			cfg.KubeClient = &crdRegistrationKubeClient{Interface: client}
 			install := action.NewInstall(cfg)
 			install.ReleaseName, install.Namespace = "monitoring", "test"
 			install.WaitStrategy = tc.strategy
@@ -136,12 +138,20 @@ func TestInstallWaitsForCRDRegistration(t *testing.T) {
 				Files:     []*common.File{{Name: "crds/monitor.yaml", Data: []byte("apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: servicemonitors.monitoring.coreos.com\n")}},
 				Templates: []*common.File{{Name: "templates/monitor.yaml", Data: []byte("apiVersion: monitoring.coreos.com/v1\nkind: ServiceMonitor\nmetadata:\n  name: example\n")}},
 			}
+			if tc.noCRDs {
+				ch.Files = nil
+				ch.Templates = []*common.File{{Name: "templates/cm.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\n")}}
+			}
 			_, err := installRelease(install, ch, nil)
 			if !errors.Is(err, tc.waitErr) {
 				t.Fatalf("install error = %v; want %v", err, tc.waitErr)
 			}
-			if client.crdWaits != 1 {
-				t.Fatalf("CRD readiness checks = %d; want 1", client.crdWaits)
+			wantCRDWaits := 1
+			if tc.noCRDs {
+				wantCRDWaits = 0
+			}
+			if client.crdWaits != wantCRDWaits {
+				t.Fatalf("CRD readiness checks = %d; want %d", client.crdWaits, wantCRDWaits)
 			}
 			if tc.waitErr != nil && client.manifestBuilt {
 				t.Fatal("processed custom resources despite failed CRD registration")

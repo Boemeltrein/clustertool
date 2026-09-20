@@ -184,6 +184,7 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 	}
 
 	// Set up Helm install action
+	actionConfig.KubeClient = &crdRegistrationKubeClient{Interface: actionConfig.KubeClient}
 	client := action.NewInstall(actionConfig)
 	client.Namespace = namespace
 	client.ReleaseName = releaseName
