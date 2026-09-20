@@ -58,8 +58,7 @@ jobs:
           mkdir -p dist/package
           go build -trimpath -ldflags "-s -w -X main.Version=${version}" -o dist/package/clustertool .
           cp LICENSE dist/package/
-          built_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          printf 'Version: %s\nCommit: %s\nPlatform: linux/amd64\nBuilt at: %s\n' "$version" "$source_sha" "$built_at" > dist/package/BUILD.txt
+          bash .github/scripts/build-info.sh "$version" "$source_sha" dist/package linux/amd64
           chmod 755 dist/package/clustertool
           tar -czf "dist/${archive}" -C dist/package clustertool LICENSE BUILD.txt
           tar -tzf "dist/${archive}"
@@ -134,13 +133,8 @@ jobs:
           go build -trimpath -ldflags "-s -w -X main.Version=$version" -o dist/package/clustertool.exe .
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item LICENSE dist/package/
-          $builtAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-          @(
-            "Version: $version"
-            "Commit: $sourceSha"
-            "Platform: windows/amd64"
-            "Built at: $builtAt"
-          ) | Set-Content -Encoding utf8 dist/package/BUILD.txt
+          & "$env:ProgramFiles/Git/bin/bash.exe" .github/scripts/build-info.sh "$version" "$sourceSha" dist/package windows/amd64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Compress-Archive -Path dist/package/clustertool.exe, dist/package/LICENSE, dist/package/BUILD.txt -DestinationPath "dist/$archive"
           $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path "dist/$archive"))
           try { $zip.Entries | Select-Object FullName, Length } finally { $zip.Dispose() }

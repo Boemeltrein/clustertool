@@ -19,10 +19,19 @@ gomod:
   dir: .
 archives:
   - name_template: "{{.ProjectName}}_{{ .Version }}_{{.Os}}_{{.Arch}}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - src: "{{ .Dist }}/build-info/{{ .Os }}_{{ .Arch }}/BUILD.txt"
+        dst: .
+        strip_parent: true
 checksum:
   name_template: "checksums.txt"
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 changelog:
   sort: asc
   filters:
@@ -62,6 +71,7 @@ before:
     - bash ./embed/download_talosctl.sh
     - chmod +x ./partial_builds/partial_build.sh
     - bash ./partial_builds/partial_build.sh
+    - bash ./.github/scripts/build-info.sh "{{ .Version }}" "{{ .FullCommit }}" "{{ .Dist }}/build-info"
 
 # sboms:
 #   - artifacts: archive
