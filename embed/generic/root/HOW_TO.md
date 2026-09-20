@@ -64,6 +64,11 @@ plan that storage change separately before replacing the old mounts.
 Run `clustertool init`, fill in `clusters/main/secrets/cluster-settings.sops.yaml`, then run
 `clustertool init` again to complete setup. Existing Talos secrets are retained.
 
+`RUNAGAIN` remains until init completes successfully, so a failed setup can be
+retried. If Talos secrets already exist and `RUNAGAIN` is absent, init warns before
+decrypting or changing repository files. Enter `y` to continue; the default is no.
+Prefer initializing in a new folder and comparing it with your existing configuration.
+
 ```text
 clusters/main/talos/
 ├── clustertool.yaml

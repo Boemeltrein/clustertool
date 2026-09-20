@@ -24,7 +24,7 @@ import (
 var errInitialSetup = errors.New("initial environment setup required")
 
 func InitFiles() error {
-	for _, step := range []func() error{removeRunAgainFile, ageGen, genRootFiles, genBaseFiles, CheckEnvVariables} {
+	for _, step := range []func() error{ageGen, genRootFiles, genBaseFiles, CheckEnvVariables} {
 		if err := step(); err != nil {
 			if errors.Is(err, errInitialSetup) {
 				return nil
@@ -57,6 +57,9 @@ func InitFiles() error {
 	log.Info().Msg("Kustomizations processed successfully.")
 
 	if err := helper.CreateEncrPreCommitHook(); err != nil {
+		return err
+	}
+	if err := removeRunAgainFile(); err != nil {
 		return err
 	}
 	log.Info().Msg("Init: Completed Successfully!")
