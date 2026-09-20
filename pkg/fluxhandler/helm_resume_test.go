@@ -20,16 +20,18 @@ import (
 type readinessClient struct {
 	fake.PrintingKubeClient
 	fake.PrintingKubeWaiter
-	waits   int
-	creates int
-	err     error
+	waits    int
+	creates  int
+	err      error
+	strategy kube.WaitStrategy
 }
 
 func (c *readinessClient) Wait(_ kube.ResourceList, _ time.Duration) error { c.waits++; return c.err }
 func (c *readinessClient) GetWaiter(ws kube.WaitStrategy) (kube.Waiter, error) {
 	return c.GetWaiterWithOptions(ws)
 }
-func (c *readinessClient) GetWaiterWithOptions(_ kube.WaitStrategy, _ ...kube.WaitOption) (kube.Waiter, error) {
+func (c *readinessClient) GetWaiterWithOptions(strategy kube.WaitStrategy, _ ...kube.WaitOption) (kube.Waiter, error) {
+	c.strategy = strategy
 	return c, nil
 }
 func (c *readinessClient) Create(r kube.ResourceList, opts ...kube.ClientCreateOption) (*kube.Result, error) {
@@ -56,6 +58,9 @@ func TestResumeChecksReadinessWithoutInstalling(t *testing.T) {
 	if client.waits != 1 || client.creates != 0 {
 		t.Fatal("resume ignored wait policy or installed resources")
 	}
+	if client.strategy != kube.StatusWatcherStrategy {
+		t.Fatalf("resume used wait strategy %q", client.strategy)
+	}
 	client.err = errors.New("readiness timed out")
 	if _, err := resumeHelmRelease(cfg, "storage", true); !errors.Is(err, client.err) {
 		t.Fatal(err)
@@ -78,7 +83,7 @@ func TestInstallTimeoutPreservesOriginalErrorAndRelease(t *testing.T) {
 	install := action.NewInstall(cfg)
 	install.ReleaseName = "storage"
 	install.Namespace = "test"
-	install.WaitStrategy = kube.LegacyStrategy
+	install.WaitStrategy = kube.StatusWatcherStrategy
 	install.ServerSideApply = true
 	install.Timeout = time.Second
 	ch := &chart.Chart{Metadata: &chart.Metadata{Name: "storage", Version: "1.0.0", APIVersion: "v2"}, Templates: []*common.File{{Name: "templates/cm.yaml", Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\n")}}}
@@ -88,6 +93,9 @@ func TestInstallTimeoutPreservesOriginalErrorAndRelease(t *testing.T) {
 	}
 	if client.creates > 1 || client.waits != 1 {
 		t.Fatalf("install retried: creates=%d waits=%d", client.creates, client.waits)
+	}
+	if client.strategy != kube.StatusWatcherStrategy {
+		t.Fatalf("install used wait strategy %q", client.strategy)
 	}
 	result, err := cfg.Releases.Get("storage", 1)
 	if err != nil || result.(*release.Release).Info.Status != releasecommon.StatusFailed {

@@ -203,7 +203,7 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 	client.ServerSideApply = true
 	client.WaitStrategy = kube.HookOnlyStrategy
 	if wait {
-		client.WaitStrategy = kube.LegacyStrategy
+		client.WaitStrategy = kube.StatusWatcherStrategy
 	}
 	client.Timeout = 15 * time.Minute
 

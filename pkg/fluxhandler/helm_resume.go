@@ -35,7 +35,7 @@ func resumeHelmRelease(config *action.Configuration, name string, wait bool) (bo
 		if err != nil {
 			return true, fmt.Errorf("read resources for release %s: %w", name, err)
 		}
-		waiter, err := config.KubeClient.GetWaiter(kube.LegacyStrategy)
+		waiter, err := config.KubeClient.GetWaiter(kube.StatusWatcherStrategy)
 		if err != nil {
 			return true, fmt.Errorf("wait for existing release %s: %w", name, err)
 		}
