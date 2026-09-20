@@ -22,7 +22,6 @@ import (
 	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/kube"
 	"helm.sh/helm/v4/pkg/registry"
-	releasecommon "helm.sh/helm/v4/pkg/release/common"
 	release "helm.sh/helm/v4/pkg/release/v1"
 	repo "helm.sh/helm/v4/pkg/repo/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -354,6 +353,10 @@ func HelmUpgrade(repoURL string, chartName string, releaseName string, namespace
 	client.Version = version
 	client.ServerSideApply = "auto"
 	client.WaitStrategy = kube.HookOnlyStrategy
+	if wait {
+		client.WaitStrategy = kube.StatusWatcherStrategy
+	}
+	client.Timeout = 15 * time.Minute
 
 	tempValuesName := releaseName + "tempvalues.yaml"
 	tempValuesPath := path.Join(workDir, tempValuesName)
@@ -414,10 +417,6 @@ func HelmUpgrade(repoURL string, chartName string, releaseName string, namespace
 		return fmt.Errorf("failed to upgrade chart: %w", err)
 	}
 	release := result.(*release.Release)
-
-	if wait {
-		waitForRelease(actionConfig, release.Name, client.Namespace)
-	}
 
 	log.Printf("Upgraded Chart: %s in namespace: %s\n", release.Name, release.Namespace)
 	log.Printf("Upgraded Chart values: %v\n", release.Config)
@@ -578,21 +577,4 @@ func repoURL(url string) string {
 	}
 
 	return url
-}
-
-func waitForRelease(actionConfig *action.Configuration, releaseName, namespace string) {
-	statusClient := action.NewStatus(actionConfig)
-	for {
-		result, err := statusClient.Run(releaseName)
-		if err != nil {
-			log.Info().Msgf("failed to get release status: %v", err)
-		}
-		rel := result.(*release.Release)
-		if rel.Info.Status == releasecommon.StatusDeployed {
-			log.Info().Msgf("Release %s is now deployed\n", releaseName)
-			break
-		}
-		log.Info().Msgf("Waiting for release %s to be deployed (current status: %s)\n", releaseName, rel.Info.Status)
-		time.Sleep(5 * time.Second)
-	}
 }
