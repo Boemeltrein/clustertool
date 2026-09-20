@@ -10,8 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
-	"github.com/go-logr/zerologr"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/trueforge-org/clustertool/pkg/helper"
 	fthelper "github.com/trueforge-org/forgetool/v4/pkg/helper"
@@ -54,11 +53,11 @@ func HelmPull(repo string, name string, version string, dest string, silent bool
 	actionConfig := new(action.Configuration)
 
 	// Define logger based on the silent parameter
-	logger := zerologr.New(&log.Logger)
-	if silent {
-		logger = logr.Discard()
+	logger := log.Logger
+	if silent && zerolog.GlobalLevel() > zerolog.DebugLevel {
+		logger = zerolog.Nop()
 	}
-	actionConfig.SetLogger(logr.ToSlogHandler(logger))
+	actionConfig.SetLogger(zerolog.NewSlogHandler(logger))
 
 	// Initialize actionConfig with the appropriate logger
 	if err := actionConfig.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER")); err != nil {
@@ -143,11 +142,11 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 
 	settings.SetNamespace(namespace)
 
-	logger := zerologr.New(&log.Logger)
-	if silent {
-		logger = logr.Discard()
+	logger := log.Logger
+	if silent && zerolog.GlobalLevel() > zerolog.DebugLevel {
+		logger = zerolog.Nop()
 	}
-	actionConfig.SetLogger(logr.ToSlogHandler(logger))
+	actionConfig.SetLogger(zerolog.NewSlogHandler(logger))
 
 	if err := actionConfig.Init(settings.RESTClientGetter(), namespace,
 		os.Getenv("HELM_DRIVER")); err != nil {
@@ -300,11 +299,11 @@ func HelmUpgrade(repoURL string, chartName string, releaseName string, namespace
 
 	settings.SetNamespace(namespace)
 
-	logger := zerologr.New(&log.Logger)
-	if silent {
-		logger = logr.Discard()
+	logger := log.Logger
+	if silent && zerolog.GlobalLevel() > zerolog.DebugLevel {
+		logger = zerolog.Nop()
 	}
-	actionConfig.SetLogger(logr.ToSlogHandler(logger))
+	actionConfig.SetLogger(zerolog.NewSlogHandler(logger))
 
 	if err := actionConfig.Init(settings.RESTClientGetter(), namespace,
 		os.Getenv("HELM_DRIVER")); err != nil {
