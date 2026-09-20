@@ -52,12 +52,7 @@ func HelmPull(repo string, name string, version string, dest string, silent bool
 	settings := cli.New()
 	actionConfig := new(action.Configuration)
 
-	// Define logger based on the silent parameter
-	logger := log.Logger
-	if silent && zerolog.GlobalLevel() > zerolog.DebugLevel {
-		logger = zerolog.Nop()
-	}
-	actionConfig.SetLogger(zerolog.NewSlogHandler(logger))
+	actionConfig.SetLogger(zerolog.NewSlogHandler(log.Logger))
 
 	// Initialize actionConfig with the appropriate logger
 	if err := actionConfig.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER")); err != nil {
@@ -142,11 +137,7 @@ func HelmInstall(repoURL string, chartName string, releaseName string, namespace
 
 	settings.SetNamespace(namespace)
 
-	logger := log.Logger
-	if silent && zerolog.GlobalLevel() > zerolog.DebugLevel {
-		logger = zerolog.Nop()
-	}
-	actionConfig.SetLogger(zerolog.NewSlogHandler(logger))
+	actionConfig.SetLogger(zerolog.NewSlogHandler(log.Logger))
 
 	if err := actionConfig.Init(settings.RESTClientGetter(), namespace,
 		os.Getenv("HELM_DRIVER")); err != nil {
@@ -299,11 +290,7 @@ func HelmUpgrade(repoURL string, chartName string, releaseName string, namespace
 
 	settings.SetNamespace(namespace)
 
-	logger := log.Logger
-	if silent && zerolog.GlobalLevel() > zerolog.DebugLevel {
-		logger = zerolog.Nop()
-	}
-	actionConfig.SetLogger(zerolog.NewSlogHandler(logger))
+	actionConfig.SetLogger(zerolog.NewSlogHandler(log.Logger))
 
 	if err := actionConfig.Init(settings.RESTClientGetter(), namespace,
 		os.Getenv("HELM_DRIVER")); err != nil {
