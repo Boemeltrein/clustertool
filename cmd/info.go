@@ -19,6 +19,8 @@ Workflow:
  Available commands
   > clustertool init
   > clustertool genconfig
+  > clustertool genks
+  > clustertool githook
 
 `)
 

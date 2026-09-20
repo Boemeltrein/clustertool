@@ -64,6 +64,13 @@ plan that storage change separately before replacing the old mounts.
 Run `clustertool init`, fill in `clusters/main/secrets/cluster-settings.sops.yaml`, then run
 `clustertool init` again to complete setup. Existing Talos secrets are retained.
 
+Init blocks legacy Talhelper-configured clusters. Initialize ClusterTool 5 in a new folder.
+
+`RUNAGAIN` remains until init completes successfully, so a failed setup can be
+retried. If Talos secrets already exist and `RUNAGAIN` is absent, init warns before
+decrypting or changing repository files. Enter `y` or `yes` to continue, or `n` or `no` to cancel. Empty or invalid input repeats the question, as in Flux bootstrap.
+Prefer initializing in a new folder and comparing it with your existing configuration.
+
 ```text
 clusters/main/talos/
 ├── clustertool.yaml
@@ -158,6 +165,30 @@ continues with the other charts and Flux.
 If setup is interrupted, run apply again. When a matching
 `.bootstrap-in-progress.json` exists, ClusterTool asks whether to resume.
 The file is removed after successful setup. Keep the original cluster secrets.
+
+## Restore the Git hook
+
+Run `clustertool githook` from your cluster repository root after switching
+environments or rebuilding a devcontainer. ClusterTool refreshes its embedded
+tools in the local cache and replaces `.git/hooks/pre-commit` with a hook pointing
+to the current environment's precommit binary. Commits remain blocked if that
+binary is missing or fails. `init` and `genconfig` also install the hook and now
+report installation errors instead of reporting success.
+
+## Generate Kustomizations
+
+`init` prepares Flux placeholders and Kustomizations. After init, maintain these
+files yourself; `genconfig` and `talos apply` no longer update them.
+To optionally create missing `ks.yaml` files and add resources to
+`kustomization.yaml` files under `clusters/<cluster>/kubernetes`, run:
+
+```sh
+clustertool genks
+clustertool genks --cluster main
+```
+
+`kustomizations` is an alias for `genks`. Existing `ks.yaml` files are preserved.
+Review the generated changes before committing.
 
 ## Flux Operator
 

@@ -24,6 +24,9 @@ var initFiles = &cobra.Command{
 	Long:    initLongHelp,
 	Example: "clustertool init",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := initfiles.ConfirmInit(); err != nil {
+			return err
+		}
 		if err := sops.DecryptFiles(); err != nil {
 			// A missing SOPS config is expected during the first initialization.
 			if _, statErr := os.Stat(".sops.yaml"); !os.IsNotExist(statErr) {

@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -79,7 +80,7 @@ func CreateEncrPreCommitHook() error {
 
 func buildHookFileData(dir string) (string, string, error) {
 	hookPath := getPreCommitHookPath(dir)
-	hookScript, err := buildPreCommitHookScriptFn(dir)
+	hookScript, err := buildPreCommitHookScriptFn()
 	if err != nil {
 		return "", "", err
 	}
@@ -92,11 +93,9 @@ func writeHookScript(hookPath, hookScript string) error {
 	if err != nil {
 		return fmt.Errorf("could not create pre-commit hook file: %v", err)
 	}
-	defer file.Close()
-
-	_, err = hookWriteStringFn(file, hookScript)
-	if err != nil {
-		return fmt.Errorf("could not write to pre-commit hook file: %v", err)
+	_, writeErr := hookWriteStringFn(file, hookScript)
+	if err := errors.Join(writeErr, file.Close()); err != nil {
+		return fmt.Errorf("could not write pre-commit hook %s: %w", hookPath, err)
 	}
 
 	return nil
@@ -121,28 +120,9 @@ func getPreCommitHookPath(dir string) string {
 	return filepath.Join(hooksDir, "pre-commit")
 }
 
-func buildPreCommitHookScript(dir string) (string, error) {
-	goModPath := filepath.Join(dir, "go.mod")
-	if _, err := hookStatFn(goModPath); !os.IsNotExist(err) {
-		return buildGoRunHookScript(), nil
-	}
-
+func buildPreCommitHookScript() (string, error) {
 	scriptPath := filepath.Join(CacheDir, "precommit")
 	return buildExecutableHookScript(scriptPath), nil
-}
-
-func buildGoRunHookScript() string {
-	return `#!/bin/sh
-# Pre-commit hook script
-
-# Use go run . checkcrypt if go.mod exists
-echo "Running pre-commit encryption check..."
-# go run . checkcrypt
-if [ $? -ne 0 ]; then
-    echo "Pre-commit encryption check failed. Commit aborted."
-    exit 1
-fi
-`
 }
 
 func buildExecutableHookScript(scriptPath string) string {
