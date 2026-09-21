@@ -30,7 +30,7 @@ func FluxBootstrap(ctx context.Context) error {
 		return fmt.Errorf("bootstrap Flux: %w", err)
 	}
 	log.Info().Msg("Flux configuration installed. Reconciliation continues in the background.")
-	log.Info().Msg("Ensure the deploy key is registered in GitHub.")
+	log.Info().Msg("Ensure the public key from ssh-public-key.txt is added to your GitHub account under Settings > SSH and GPG keys.")
 	log.Info().Msg("Check progress with: kubectl get fluxinstance,gitrepository,kustomization -n flux-system")
 	return nil
 }
