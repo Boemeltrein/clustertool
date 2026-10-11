@@ -12,7 +12,6 @@
         "redhat.vscode-yaml",
         "formulahendry.code-runner",
         "streetsidesoftware.code-spell-checker",
-        "Codium.codium",
         "mrmlnc.vscode-duplicate",
         "IgorSbitnev.error-gutters",
         "usernamehw.errorlens",
@@ -26,7 +25,7 @@
         "searKing.preview-vscode",
         "zxh404.vscode-proto3",
         "DavidAnson.vscode-markdownlint",
-        "GitHub.copilot"
+        "Anthropic.claude-code"
       ]
     }
   }
