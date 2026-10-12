@@ -19,7 +19,7 @@ permissions:
 
 env:
   # renovate: datasource=github-releases depName=jdx/mise
-  MISE_VERSION: 2026.9.15
+  MISE_VERSION: 2026.10.8
 
 jobs:
   detect:
@@ -37,7 +37,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: ${{ env.MISE_VERSION }}
           cache: false
@@ -258,7 +258,7 @@ jobs:
       # Setup required CLI tools
       # --------------------------------------------------
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
         with:
           version: ${{ env.MISE_VERSION }}
           cache: false
@@ -283,7 +283,7 @@ jobs:
         uses: nolar/setup-k3d-k3s@62c9d1bd2bc843275c85d2e7dcd696edc1160eee # v1.1.0
         with:
           # renovate: datasource=github-releases depName=k3s-io/k3s
-          version: v1.37.0+k3s1
+          version: v1.37.1+k3s1
           # renovate: datasource=github-releases depName=k3d-io/k3d
           k3d-tag: v5.9.0
           github-token: ${{ github.token }}
