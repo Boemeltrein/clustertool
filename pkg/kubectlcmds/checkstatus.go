@@ -97,5 +97,5 @@ func CheckStatus(requiredPods []string, excludePod []string, timeout time.Durati
     return fmt.Errorf(
         "timeout: not all required pods are running after %s",
         maxDuration,
-)
+    )
 }
