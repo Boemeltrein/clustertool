@@ -91,6 +91,11 @@ func CheckStatus(requiredPods []string, excludePod []string, timeout time.Durati
         time.Sleep(5 * time.Second)
     }
 
-    log.Error().Msg("Timeout: Not all required pods are running after 15 minutes")
-    return fmt.Errorf("timeout: not all required pods are running after 15 minutes")
+    log.Error().Dur("timeout", maxDuration).
+        Msg("timeout: not all required pods are running")
+    
+    return fmt.Errorf(
+        "timeout: not all required pods are running after %s",
+        maxDuration,
+)
 }
