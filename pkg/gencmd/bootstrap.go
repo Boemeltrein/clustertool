@@ -97,7 +97,7 @@ func RunBootstrap(args []string) error {
 	}
 
 	log.Info().Msgf("Bootstrap: Waiting for system Pods to be running for: %v", bootstrapNode)
-	if err := kubectlcmds.CheckStatus(requiredPods, []string{}, 600); err != nil {
+	if err := kubectlcmds.CheckStatus(requiredPods, []string{}, 15); err != nil {
 		log.Error().Err(err).Msgf("Error: %v\n", err)
 
 		return fmt.Errorf("bootstrap failed: %w", err)
@@ -248,7 +248,7 @@ func RunBootstrap(args []string) error {
 	}
 
 	log.Info().Msgf("Bootstrap: Waiting for MetalLB Pods to be running for: %v", bootstrapNode)
-	if err := kubectlcmds.CheckStatus(requiredMLBPods, []string{}, 600); err != nil {
+	if err := kubectlcmds.CheckStatus(requiredMLBPods, []string{}, 15); err != nil {
 		log.Error().Err(err).Msgf("Error: %v\n", err)
 
 		return fmt.Errorf("bootstrap failed: %w", err)
