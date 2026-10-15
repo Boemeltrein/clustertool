@@ -24,7 +24,15 @@ import (
 var errInitialSetup = errors.New("initial environment setup required")
 
 func InitFiles() error {
-	for _, step := range []func() error{ageGen, genRootFiles, genBaseFiles, CheckEnvVariables} {
+	steps := []func() error{CheckEnvVariables}
+	if _, err := os.Stat(helper.ClusterSettingsFile); os.IsNotExist(err) {
+		steps = append([]func() error{ageGen, genRootFiles, genBaseFiles}, steps...)
+	} else if err != nil {
+		return fmt.Errorf("check cluster settings %s: %w", helper.ClusterSettingsFile, err)
+	} else {
+		log.Debug().Msg("Detected existing cluster, continuing")
+	}
+	for _, step := range steps {
 		if err := step(); err != nil {
 			if errors.Is(err, errInitialSetup) {
 				return nil
@@ -138,20 +146,6 @@ func FormatGitURL(input string) string {
 }
 
 func genBaseFiles() error {
-	clusterSettingsPresent := false
-
-	if _, err := os.Stat(helper.ClusterSettingsFile); err == nil {
-		clusterSettingsPresent = true
-		log.Debug().Msg("Detected existing cluster, continuing")
-	} else if os.IsNotExist(err) {
-		if err := createRunAgainFile(); err != nil {
-			return err
-		}
-		log.Warn().Msg("Fill in secrets/cluster-settings.sops.yaml, then run init again.")
-	} else {
-		return fmt.Errorf("check cluster settings %s: %w", helper.ClusterSettingsFile, err)
-	}
-
 	err := fthelper.CopyDir(helper.BaseCache, helper.ClusterPath+"", false)
 	if err != nil {
 		return err
@@ -159,11 +153,11 @@ func genBaseFiles() error {
 		log.Info().Msg("Base files copied successfully.")
 	}
 
-	if !clusterSettingsPresent {
-		return errInitialSetup
+	if err := createRunAgainFile(); err != nil {
+		return err
 	}
-
-	return nil
+	log.Warn().Msg("Fill in secrets/cluster-settings.sops.yaml, then run init again.")
+	return errInitialSetup
 }
 
 // Create the "RUNAGAIN" file

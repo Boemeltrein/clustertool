@@ -30,6 +30,7 @@ func bootstrapTalosNodes(inv *talosconfig.Inventory, applyNode func(string) erro
 		}
 	}
 
+	log.Info().Msg("Bootstrap: checking for an existing bootstrapped control plane; this may take up to 30 seconds per control-plane node")
 	if _, err := ExistingControlPlane(inv); err == nil {
 		return nil
 	}
