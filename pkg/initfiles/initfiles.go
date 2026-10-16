@@ -41,7 +41,7 @@ func InitFiles() error {
 		log.Warn().Msg("Fill in secrets/cluster-settings.sops.yaml, then run init again.")
 		return nil
 	}
-	log.Debug().Msg("Detected existing cluster, continuing")
+	log.Debug().Msg("Cluster settings found, continuing initialization")
 	if err := CheckEnvVariables(); err != nil {
 		return err
 	}
